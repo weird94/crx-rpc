@@ -1,4 +1,4 @@
-# Chrome 扩展 RPC 框架 (@weird94/crx-rpc)
+# Chrome 扩展 RPC 框架 (crx-rpc)
 
 一个轻量级、类型安全的Chrome扩展RPC框架，支持网页、内容脚本和背景脚本之间的通信。基于TypeScript构建，提供最大的类型安全性和开发体验。
 
@@ -15,11 +15,11 @@
 ## 安装
 
 ```bash
-npm install @weird94/crx-rpc
+npm install crx-rpc
 # 或
-pnpm add @weird94/crx-rpc
+pnpm add crx-rpc
 # 或
-yarn add @weird94/crx-rpc
+yarn add crx-rpc
 ```
 
 ## 快速开始
@@ -28,7 +28,7 @@ yarn add @weird94/crx-rpc
 
 ```typescript
 // services/math.ts
-import { createIdentifier } from '@weird94/crx-rpc';
+import { createIdentifier } from 'crx-rpc';
 
 interface IMathService {
     add(a: number, b: number): Promise<number>;
@@ -45,7 +45,7 @@ export const IMathService = createIdentifier<IMathService>('MathService');
 
 ```typescript
 // background.ts
-import { BackgroundRPC } from '@weird94/crx-rpc';
+import { BackgroundRPC } from 'crx-rpc';
 import { IMathService } from './services/math';
 
 class MathService implements IMathService {
@@ -80,7 +80,7 @@ rpc.register(IMathService, new MathService());
 
 ```typescript
 // content.ts
-import { ContentRPC } from '@weird94/crx-rpc';
+import { ContentRPC } from 'crx-rpc';
 
 // 为网页 ↔ 背景脚本通信初始化RPC桥接器
 const contentRpc = new ContentRPC();
@@ -93,7 +93,7 @@ const contentRpc = new ContentRPC();
 
 ```typescript
 // content.ts
-import { ContentRPCClient } from '@weird94/crx-rpc';
+import { ContentRPCClient } from 'crx-rpc';
 import { IMathService } from './services/math';
 
 // 将内容脚本用作直接RPC客户端
@@ -112,7 +112,7 @@ console.log('内容脚本结果:', result);
 
 ```typescript
 // content.ts
-import { ContentRPC, ContentRPCClient } from '@weird94/crx-rpc';
+import { ContentRPC, ContentRPCClient } from 'crx-rpc';
 import { IMathService } from './services/math';
 
 // 为网页初始化桥接器
@@ -131,7 +131,7 @@ console.log('内容脚本计算:', result);
 
 ```typescript
 // web-page.ts
-import { WebRPCClient } from '@weird94/crx-rpc';
+import { WebRPCClient } from 'crx-rpc';
 import { IMathService } from './services/math';
 
 async function calculate() {
@@ -233,7 +233,7 @@ interface RpcErrorDetails {
 
 ```typescript
 // background.ts
-import { BackgroundRPC, RemoteSubject, createIdentifier } from '@weird94/crx-rpc';
+import { BackgroundRPC, RemoteSubject, createIdentifier } from 'crx-rpc';
 
 interface ICounterObservable {
     value: number;
@@ -260,7 +260,7 @@ setInterval(() => {
 
 ```typescript
 // web-page.ts
-import { WebObservable, createIdentifier } from '@weird94/crx-rpc';
+import { WebObservable, createIdentifier } from 'crx-rpc';
 
 interface ICounterObservable {
     value: number;
@@ -285,7 +285,7 @@ const observable = new WebObservable(
 
 ```typescript
 // content.ts
-import { ContentObservable, createIdentifier } from '@weird94/crx-rpc';
+import { ContentObservable, createIdentifier } from 'crx-rpc';
 
 interface ICounterObservable {
     value: number;
@@ -334,7 +334,7 @@ Observable系统支持多种通信模式：
 所有RPC组件都继承了 `Disposable` 类来进行适当的清理：
 
 ```typescript
-import { WebRPCClient, ContentRPC, BackgroundRPC } from '@weird94/crx-rpc';
+import { WebRPCClient, ContentRPC, BackgroundRPC } from 'crx-rpc';
 
 const client = new WebRPCClient();
 const contentRpc = new ContentRPC();
@@ -360,7 +360,7 @@ if (!client.isDisposed()) {
 
 ```typescript
 // content.ts
-import { ContentRPCClient, ContentObservable } from '@weird94/crx-rpc';
+import { ContentRPCClient, ContentObservable } from 'crx-rpc';
 import { IMathService, IUserService } from './services';
 
 const client = new ContentRPCClient();

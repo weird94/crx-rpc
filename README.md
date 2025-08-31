@@ -1,4 +1,4 @@
-# Chrome Extension RPC (@weird94/crx-rpc)
+# Chrome Extension RPC (crx-rpc)
 
 A lightweight, type-safe RPC framework for Chrome Extensions supporting communication between web pages, content scripts, and background scripts. Built with TypeScript for maximum type safety and developer experience.
 
@@ -15,11 +15,11 @@ A lightweight, type-safe RPC framework for Chrome Extensions supporting communic
 ## Installation
 
 ```bash
-npm install @weird94/crx-rpc
+npm install crx-rpc
 # or
-pnpm add @weird94/crx-rpc
+pnpm add crx-rpc
 # or
-yarn add @weird94/crx-rpc
+yarn add crx-rpc
 ```
 
 ## Quick Start
@@ -28,7 +28,7 @@ yarn add @weird94/crx-rpc
 
 ```typescript
 // services/math.ts
-import { createIdentifier } from '@weird94/crx-rpc';
+import { createIdentifier } from 'crx-rpc';
 
 interface IMathService {
     add(a: number, b: number): Promise<number>;
@@ -45,7 +45,7 @@ export const IMathService = createIdentifier<IMathService>('MathService');
 
 ```typescript
 // background.ts
-import { BackgroundRPC } from '@weird94/crx-rpc';
+import { BackgroundRPC } from 'crx-rpc';
 import { IMathService } from './services/math';
 
 class MathService implements IMathService {
@@ -80,7 +80,7 @@ Content scripts can work in two modes:
 
 ```typescript
 // content.ts
-import { ContentRPC } from '@weird94/crx-rpc';
+import { ContentRPC } from 'crx-rpc';
 
 // Initialize RPC bridge for web page ↔ background communication
 const contentRpc = new ContentRPC();
@@ -93,7 +93,7 @@ const contentRpc = new ContentRPC();
 
 ```typescript
 // content.ts
-import { ContentRPCClient } from '@weird94/crx-rpc';
+import { ContentRPCClient } from 'crx-rpc';
 import { IMathService } from './services/math';
 
 // Use content script as a direct RPC client
@@ -112,7 +112,7 @@ console.log('Result from content script:', result);
 
 ```typescript
 // content.ts
-import { ContentRPC, ContentRPCClient } from '@weird94/crx-rpc';
+import { ContentRPC, ContentRPCClient } from 'crx-rpc';
 import { IMathService } from './services/math';
 
 // Initialize bridge for web pages
@@ -131,7 +131,7 @@ console.log('Content script calculation:', result);
 
 ```typescript
 // web-page.ts
-import { WebRPCClient } from '@weird94/crx-rpc';
+import { WebRPCClient } from 'crx-rpc';
 import { IMathService } from './services/math';
 
 async function calculate() {
@@ -217,7 +217,7 @@ The framework includes built-in support for reactive data streams using `RemoteS
 
 ```typescript
 // background.ts
-import { BackgroundRPC, RemoteSubject, createIdentifier } from '@weird94/crx-rpc';
+import { BackgroundRPC, RemoteSubject, createIdentifier } from 'crx-rpc';
 
 interface ICounterObservable {
     value: number;
@@ -244,7 +244,7 @@ setInterval(() => {
 
 ```typescript
 // web-page.ts
-import { WebObservable, createIdentifier } from '@weird94/crx-rpc';
+import { WebObservable, createIdentifier } from 'crx-rpc';
 
 interface ICounterObservable {
     value: number;
@@ -269,7 +269,7 @@ const observable = new WebObservable(
 
 ```typescript
 // content.ts
-import { ContentObservable, createIdentifier } from '@weird94/crx-rpc';
+import { ContentObservable, createIdentifier } from 'crx-rpc';
 
 interface ICounterObservable {
     value: number;
@@ -318,7 +318,7 @@ The Observable system supports multiple communication patterns:
 All RPC components extend the `Disposable` class for proper cleanup:
 
 ```typescript
-import { WebRPCClient, ContentRPC, BackgroundRPC } from '@weird94/crx-rpc';
+import { WebRPCClient, ContentRPC, BackgroundRPC } from 'crx-rpc';
 
 const client = new WebRPCClient();
 const contentRpc = new ContentRPC();
