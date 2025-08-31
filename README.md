@@ -156,36 +156,20 @@ async function calculate() {
 
 ## Architecture
 
+### Hybrid Mode (Both Bridge + Direct)
 ```
-Web Page           Content Script        Background Script
-┌─────────────┐   ┌─────────────────┐   ┌─────────────────┐
-│ WebRPCClient│──▶│   ContentRPC    │──▶│  BackgroundRPC  │
-│             │   │   (Bridge)      │   │                 │
-│ Proxy       │   │                 │   │ Service         │
-│ Service     │   │ MessageAdapter  │   │ Registry        │
-│ .add(1, 2)  │   │                 │   │                 │
-└─────────────┘   └─────────────────┘   └─────────────────┘
-        │                  │                       ▲
-        │  CustomEvent     │  chrome.runtime      │
-        │                  │  Messages            │
-        └──────────────────┴──────────────────────┘
-                           │
-                    ┌─────────────────┐
-                    │ContentRPCClient │
-                    │   (Direct)      │
-                    │                 │
-                    │ Proxy Service   │
-                    │ .subtract(5,2)  │
-                    └─────────────────┘
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Web Page      │    │ Content Script  │    │ Background      │
+│                 │    │ (Bridge+Client) │    │ Script          │
+├─────────────────┤    ├─────────────────┤    ├─────────────────┤
+│ WebRPCClient    │    │   ContentRPC    │    │ BackgroundRPC   │
+│                 │    │      +          │    │                 │
+│ mathService ────┼───▶│ContentRPCClient │◄──▶│ MathService     │
+│ .add(1,2)       │◄───│                 │    │ UserService     │
+│                 │    │ userService     │    │                 │
+│                 │    │ .getUser() ─────┼───▶│                 │
+└─────────────────┘    └─────────────────┘◄───└─────────────────┘
 ```
-
-### Communication Flow
-
-1. **Web Page → Content Script**: Uses `window.dispatchEvent` with `CustomEvent`
-2. **Content Script → Background**: Uses `chrome.runtime.sendMessage`
-3. **Background → Content Script**: Uses `chrome.tabs.sendMessage`
-4. **Content Script → Web Page**: Uses `window.dispatchEvent` with `CustomEvent`
-5. **Content Script Direct**: Uses `chrome.runtime.sendMessage` directly (ContentRPCClient)
 
 ### Key Components
 
