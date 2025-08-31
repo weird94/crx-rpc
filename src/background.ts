@@ -1,12 +1,14 @@
 import type { Identifier } from './id';
 import { OBSERVABLE_EVENT, RPC_EVENT_NAME, RPC_RESPONSE_EVENT_NAME, SUBSCRIBABLE_OBSERVABLE, UNSUBSCRIBE_OBSERVABLE } from './const';
 import type { RpcRequest, RpcResponse, RpcService, SubjectLike, RpcObservableUpdateMessage, RpcObservableSubscribeMessage } from './types';
+import { Disposable } from './disposable';
 
-export class BackgroundRPC {
+export class BackgroundRPC extends Disposable {
     private services: Record<string, RpcService> = {};
 
     constructor() {
-        chrome.runtime.onMessage.addListener((msg: RpcRequest & { type?: string }, sender) => {
+        super();
+        const handler = ((msg: RpcRequest & { type?: string }, sender: chrome.runtime.MessageSender) => {
             if (msg.type !== RPC_EVENT_NAME) return;
             const senderId = sender.tab!.id!;
             const sendResponse = (response: RpcResponse) => {
@@ -62,6 +64,11 @@ export class BackgroundRPC {
 
             return true; // 异步 sendResponse
         });
+
+        chrome.runtime.onMessage.addListener(handler);
+        this.disposeWithMe(() => {
+            chrome.runtime.onMessage.removeListener(handler);
+        });
     }
 
     register<T>(service: Identifier<T>, serviceInstance: T) {
@@ -69,7 +76,7 @@ export class BackgroundRPC {
     }
 }
 
-export class RemoteSubject<T> implements SubjectLike<T> {
+export class RemoteSubject<T> extends Disposable implements SubjectLike<T> {
     private completed = false;
 
     private get _finalKey() {
@@ -83,8 +90,9 @@ export class RemoteSubject<T> implements SubjectLike<T> {
         private _key: string,
         private initialValue: T,
     ) {
+        super();
         // 初始化时立即广播一次
-        chrome.runtime.onMessage.addListener((msg: RpcObservableSubscribeMessage, sender) => {
+        const handleMessage = (msg: RpcObservableSubscribeMessage, sender: chrome.runtime.MessageSender) => {
             const senderId = sender.tab!.id!;
             if (!senderId) return;
 
@@ -106,10 +114,18 @@ export class RemoteSubject<T> implements SubjectLike<T> {
                     this.senders.delete(senderId);
                 }
             }
+        }
+        chrome.runtime.onMessage.addListener(handleMessage);
+        this.disposeWithMe(() => {
+            chrome.runtime.onMessage.removeListener(handleMessage);
         });
 
-        chrome.tabs.onRemoved.addListener((tabId) => {
+        const handleRemove = (tabId: number) => {
             this.senders.delete(tabId);
+        };
+        chrome.tabs.onRemoved.addListener(handleRemove);
+        this.disposeWithMe(() => {
+            chrome.tabs.onRemoved.removeListener(handleRemove);
         });
     }
 

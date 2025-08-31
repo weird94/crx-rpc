@@ -1,6 +1,7 @@
 import { OBSERVABLE_EVENT, RPC_EVENT_NAME, RPC_RESPONSE_EVENT_NAME, UNSUBSCRIBE_OBSERVABLE } from './const';
-import type { RpcRequest, RpcResponse, RpcObservableUpdateMessage } from './types';
+import type { RpcRequest, RpcResponse, RpcObservableUpdateMessage, IMessageAdapter } from './types';
 import type { Identifier } from './id';
+import { Disposable } from './disposable';
 
 // 类型工具：提取函数类型的参数和返回值类型
 type FunctionArgs<T> = T extends (...args: infer A) => any ? A : never;
@@ -13,12 +14,15 @@ type ServiceProxy<T> = {
     : never;
 };
 
-export class WebRPCClient {
+export class RPCClient extends Disposable {
     private pending: Map<string, { resolve: Function; reject: Function }> = new Map();
 
-    constructor() {
-        window.addEventListener(RPC_RESPONSE_EVENT_NAME, (event: any) => {
-            const { id, result, error } = event.detail as RpcResponse;
+    constructor(
+        private messageAdapter: IMessageAdapter
+    ) {
+        super();
+        this.disposeWithMe(messageAdapter.onMessage<RpcResponse>(RPC_RESPONSE_EVENT_NAME, (event: RpcResponse) => {
+            const { id, result, error } = event as RpcResponse;
             const promise = this.pending.get(id);
             if (!promise) return;
 
@@ -32,7 +36,7 @@ export class WebRPCClient {
             } else {
                 promise.resolve(result);
             }
-        });
+        }));
     }
 
     call<T = any>(service: string, method: string, args: any[]): Promise<T> {
@@ -45,7 +49,7 @@ export class WebRPCClient {
                 id,
                 service,
             };
-            window.dispatchEvent(new CustomEvent(RPC_EVENT_NAME, { detail: requestParam }));
+            this.messageAdapter.sendMessage(RPC_EVENT_NAME, requestParam);
         });
     }
 
@@ -67,8 +71,7 @@ export class WebRPCClient {
     }
 }
 
-
-export class Observable<T> {
+export class BaseObservable<T> extends Disposable {
     private listeners = new Set<(value: T) => void>();
     private completed = false;
 
@@ -79,9 +82,11 @@ export class Observable<T> {
     constructor(
         private identifier: Identifier<T>,
         private key: string,
-        private _callback: (value: T) => void
+        private _callback: (value: T) => void,
+        private _adapter: IMessageAdapter
     ) {
-        window.addEventListener(OBSERVABLE_EVENT, (event: any) => {
+        super();
+        this.disposeWithMe(this._adapter.onMessage(OBSERVABLE_EVENT, (event: any) => {
             const msg = event.detail as RpcObservableUpdateMessage<T>;
             if (msg.key !== this._finalKey) return;
 
@@ -93,12 +98,13 @@ export class Observable<T> {
                 this.completed = true;
                 this.listeners.clear();
             }
-        });
+        }));
 
-        window.dispatchEvent(new CustomEvent(OBSERVABLE_EVENT, { detail: { key: this._finalKey } }));
+        this._adapter.sendMessage(OBSERVABLE_EVENT, { key: this._finalKey });
     }
 
     unsubscribe(): void {
-        window.dispatchEvent(new CustomEvent(UNSUBSCRIBE_OBSERVABLE, { detail: { key: this._finalKey } }));
+        this._adapter.sendMessage(UNSUBSCRIBE_OBSERVABLE, { key: this._finalKey });
     }
 }
+

@@ -37,3 +37,13 @@ export interface RpcObservableSubscribeMessage {
     type: string;
     key: string;
 }
+
+export interface IMessageAdapter {
+    onMessage<T>(type: string, callback: (message: T) => void): () => void;
+
+    sendMessage<T>(type: string, message: T): void;
+}
+
+export interface IDisposable {
+    dispose(): void;
+}
