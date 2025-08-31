@@ -1,8 +1,12 @@
 {
     "name": "crx-rpc",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "description": "A lightweight RPC framework for Chrome Extension (background <-> content <-> web)",
-    "author": "YourName",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/weird94/crx-rpc"
+    },
+    "author": "weird94",
     "license": "MIT",
     "keywords": [
         "chrome-extension",
