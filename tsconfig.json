@@ -1,0 +1,16 @@
+{
+    "compilerOptions": {
+        "target": "ES2022",
+        "lib": ["DOM", "ES2022"],
+        "module": "ESNext",
+        "moduleResolution": "node",
+        "types": ["node", "chrome"],
+        "strict": true,
+        "declaration": true,
+        "outDir": "dist",
+        "esModuleInterop": true,
+        "forceConsistentCasingInFileNames": true,
+        "skipLibCheck": true
+    },
+    "include": ["src"]
+}

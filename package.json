@@ -1,0 +1,27 @@
+{
+    "name": "@weird94/crx-rpc",
+    "version": "1.0.0",
+    "description": "A lightweight RPC framework for Chrome Extension (background <-> content <-> web)",
+    "author": "YourName",
+    "license": "MIT",
+    "keywords": [
+        "chrome-extension",
+        "rpc",
+        "content-script",
+        "background",
+        "typescript"
+    ],
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "scripts": {
+        "build": "tsc",
+        "watch": "tsc -w",
+        "clean": "rm -rf dist",
+        "postinstall": "tsc"
+    },
+    "devDependencies": {
+        "@types/chrome": "^0.0.270",
+        "@types/node": "^24.3.0",
+        "typescript": "^5.2.2"
+    }
+}
