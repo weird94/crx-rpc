@@ -12,6 +12,16 @@ A lightweight, type-safe RPC framework for Chrome Extensions supporting communic
 - 🛡️ **Error Handling**: Preserves stack traces and error types across boundaries
 - 🧹 **Resource Management**: Built-in disposable pattern for clean resource cleanup
 
+## Installation
+
+```bash
+npm install @weird94/crx-rpc
+# or
+pnpm add @weird94/crx-rpc
+# or
+yarn add @weird94/crx-rpc
+```
+
 ## Quick Start
 
 ### 1. Define Service Interface
@@ -64,15 +74,57 @@ rpc.register(IMathService, new MathService());
 
 ### 3. Initialize Content Script
 
+Content scripts can work in two modes:
+
+#### Option A: As a Bridge (for web page communication)
+
 ```typescript
 // content.ts
 import { ContentRPC } from '@weird94/crx-rpc';
 
-// Initialize RPC bridge
+// Initialize RPC bridge for web page ↔ background communication
 const contentRpc = new ContentRPC();
 
 // Remember to dispose when cleanup is needed
 // contentRpc.dispose();
+```
+
+#### Option B: As a Direct Client
+
+```typescript
+// content.ts
+import { ContentRPCClient } from '@weird94/crx-rpc';
+import { IMathService } from './services/math';
+
+// Use content script as a direct RPC client
+const client = new ContentRPCClient();
+const mathService = client.createWebRPCService(IMathService);
+
+// Direct calls to background services
+const result = await mathService.add(5, 3);
+console.log('Result from content script:', result);
+
+// Remember to dispose when cleanup is needed
+// client.dispose();
+```
+
+#### Option C: Both Bridge and Client
+
+```typescript
+// content.ts
+import { ContentRPC, ContentRPCClient } from '@weird94/crx-rpc';
+import { IMathService } from './services/math';
+
+// Initialize bridge for web pages
+const bridge = new ContentRPC();
+
+// Also use as direct client
+const client = new ContentRPCClient();
+const mathService = client.createWebRPCService(IMathService);
+
+// Content script can make its own RPC calls
+const result = await mathService.multiply(2, 3);
+console.log('Content script calculation:', result);
 ```
 
 ### 4. Use Client (Web Page)
@@ -113,10 +165,18 @@ Web Page           Content Script        Background Script
 │ Service     │   │ MessageAdapter  │   │ Registry        │
 │ .add(1, 2)  │   │                 │   │                 │
 └─────────────┘   └─────────────────┘   └─────────────────┘
-        │                  │                       │
+        │                  │                       ▲
         │  CustomEvent     │  chrome.runtime      │
         │                  │  Messages            │
         └──────────────────┴──────────────────────┘
+                           │
+                    ┌─────────────────┐
+                    │ContentRPCClient │
+                    │   (Direct)      │
+                    │                 │
+                    │ Proxy Service   │
+                    │ .subtract(5,2)  │
+                    └─────────────────┘
 ```
 
 ### Communication Flow
@@ -125,13 +185,14 @@ Web Page           Content Script        Background Script
 2. **Content Script → Background**: Uses `chrome.runtime.sendMessage`
 3. **Background → Content Script**: Uses `chrome.tabs.sendMessage`
 4. **Content Script → Web Page**: Uses `window.dispatchEvent` with `CustomEvent`
+5. **Content Script Direct**: Uses `chrome.runtime.sendMessage` directly (ContentRPCClient)
 
 ### Key Components
 
 - **WebRPCClient**: Client for web pages using window events
 - **ContentRPC**: Bridge that forwards messages between web and background
+- **ContentRPCClient**: Direct RPC client for content scripts (bypasses bridge)
 - **BackgroundRPC**: Service registry and handler in the background script
-- **ContentRPCClient**: Client for content scripts (direct chrome.runtime communication)
 - **RPCClient**: Base client with service proxy generation
 
 ## Type System
@@ -266,16 +327,47 @@ const observable = new WebObservable(
 ### Subscribing from Content Script
 
 ```typescript
-// content.ts (if needed)
+// content.ts
 import { ContentObservable, createIdentifier } from '@weird94/crx-rpc';
 
+interface ICounterObservable {
+    value: number;
+}
+
+const ICounterObservable = createIdentifier<ICounterObservable>('Counter');
+
+// Content script can directly subscribe to observables
 const observable = new ContentObservable(
     ICounterObservable,
     'main',
     (value) => {
         console.log('Counter from content script:', value.value);
+        // Content script can react to real-time updates
+        updateUI(value.value);
     }
 );
+
+// Cleanup when done
+// observable.dispose();
+```
+
+### Observable Communication Patterns
+
+The Observable system supports multiple communication patterns:
+
+```typescript
+// Pattern 1: Background → Web Page (via Content Script bridge)
+// Background: RemoteSubject.next()
+// Web Page: WebObservable.subscribe()
+
+// Pattern 2: Background → Content Script (direct)
+// Background: RemoteSubject.next()
+// Content Script: ContentObservable.subscribe()
+
+// Pattern 3: Background → Both Web Page and Content Script
+// Background: RemoteSubject.next() (broadcasts to all subscribers)
+// Web Page: WebObservable.subscribe()
+// Content Script: ContentObservable.subscribe()
 ```
 
 ## Advanced Usage
@@ -305,83 +397,23 @@ if (!client.isDisposed()) {
 }
 ```
 
-### Content Script as Direct Client
+## Usage Scenarios
 
-Content scripts can also act as direct RPC clients:
+### Scenario 1: Web Page Only
+- Web pages need to communicate with background services
+- Use: `WebRPCClient` + `ContentRPC` bridge
 
-```typescript
-// content.ts
-import { ContentRPCClient } from '@weird94/crx-rpc';
-import { IMathService } from './services/math';
+### Scenario 2: Content Script Only  
+- Content scripts need direct access to background services
+- Use: `ContentRPCClient` directly (no bridge needed)
 
-const client = new ContentRPCClient();
-const mathService = client.createWebRPCService(IMathService);
+### Scenario 3: Both Web Page and Content Script
+- Both contexts need RPC access
+- Use: `ContentRPC` bridge + `ContentRPCClient` for direct access
 
-// Direct call to background script
-const result = await mathService.add(5, 3);
-```
-
-### Complex Data Types
-
-```typescript
-interface IUserService {
-    getUser(id: string): Promise<User>;
-    createUser(userData: CreateUserRequest): Promise<User>;
-    updateUser(id: string, updates: Partial<User>): Promise<User>;
-}
-
-interface User {
-    id: string;
-    name: string;
-    email: string;
-    createdAt: Date;
-}
-
-interface CreateUserRequest {
-    name: string;
-    email: string;
-}
-
-export const IUserService = createIdentifier<IUserService>('UserService');
-
-// Usage example
-const client = new WebRPCClient();
-const userService = client.createWebRPCService(IUserService);
-
-const newUser = await userService.createUser({
-    name: 'John Doe',
-    email: 'john@example.com',
-});
-```
-
-### Multiple Service Management
-
-```typescript
-// Create RPC client
-const client = new WebRPCClient();
-
-// Create multiple service proxies
-const mathService = client.createWebRPCService(IMathService);
-const userService = client.createWebRPCService(IUserService);
-const fileService = client.createWebRPCService(IFileService);
-
-// Parallel calls to different services
-const [sum, user, file] = await Promise.all([
-    mathService.add(1, 2),
-    userService.getUser('123'),
-    fileService.readFile('config.json'),
-]);
-```
-
-## Installation
-
-```bash
-npm install @weird94/crx-rpc
-# or
-pnpm add @weird94/crx-rpc
-# or
-yarn add @weird94/crx-rpc
-```
+### Scenario 4: Real-time Data Streaming
+- Background needs to push updates to multiple contexts
+- Use: `RemoteSubject` + `WebObservable`/`ContentObservable`
 
 ## API Reference
 
