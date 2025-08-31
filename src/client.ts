@@ -2,6 +2,7 @@ import { OBSERVABLE_EVENT, RPC_EVENT_NAME, RPC_RESPONSE_EVENT_NAME, UNSUBSCRIBE_
 import type { RpcRequest, RpcResponse, RpcObservableUpdateMessage, IMessageAdapter } from './types';
 import type { Identifier } from './id';
 import { Disposable } from './disposable';
+import { randomId } from './tool';
 
 // 类型工具：提取函数类型的参数和返回值类型
 type FunctionArgs<T> = T extends (...args: infer A) => any ? A : never;
@@ -40,7 +41,7 @@ export class RPCClient extends Disposable {
     }
 
     call<T = any>(service: string, method: string, args: any[]): Promise<T> {
-        const id = crypto.randomUUID();
+        const id = randomId();
         return new Promise<T>((resolve, reject) => {
             this.pending.set(id, { resolve, reject });
             const requestParam: RpcRequest = {
