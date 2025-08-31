@@ -211,13 +211,15 @@ interface RpcErrorDetails {
 
 ## Observable Support
 
-The framework includes built-in support for reactive data streams using `RemoteSubject` and `Observable` patterns.
+The framework includes built-in support for reactive data streams using `RemoteSubject` and `Observable` patterns with a centralized message management system.
 
-### Remote Subject (Background Script)
+### Remote Subject Manager & Remote Subject (Background Script)
+
+The `RemoteSubjectManager` acts as a centralized message hub that handles all subscription management and message routing, while `RemoteSubject` focuses purely on state management.
 
 ```typescript
 // background.ts
-import { BackgroundRPC, RemoteSubject, createIdentifier } from 'crx-rpc';
+import { BackgroundRPC, RemoteSubjectManager, createIdentifier } from 'crx-rpc';
 
 interface ICounterObservable {
     value: number;
@@ -227,8 +229,15 @@ const ICounterObservable = createIdentifier<ICounterObservable>('Counter');
 
 const rpc = new BackgroundRPC();
 
-// Create a remote subject that can broadcast to multiple subscribers
-const counterSubject = new RemoteSubject(ICounterObservable, 'main', { value: 0 });
+// Create a centralized subject manager
+const subjectManager = new RemoteSubjectManager();
+
+// Create a remote subject through the manager
+const counterSubject = subjectManager.createSubject(
+    ICounterObservable, 
+    'main', 
+    { value: 0 }
+);
 
 // Update value and broadcast to all subscribers
 setInterval(() => {
@@ -236,8 +245,43 @@ setInterval(() => {
     counterSubject.next(newValue);
 }, 1000);
 
+// The manager handles:
+// - Message routing and subscription management
+// - Queuing subscriptions that arrive before subjects are created
+// - Automatic cleanup when tabs are closed
+// - Broadcasting to multiple subscribers
+
 // Cleanup
-// counterSubject.dispose();
+// subjectManager.dispose(); // This will dispose all subjects
+```
+
+### Key Features of RemoteSubjectManager
+
+- **Centralized Message Hub**: All observable-related messages are handled by the manager
+- **Queue Management**: Subscriptions received before subject creation are queued and processed later
+- **Resource Management**: Automatic cleanup of subscriptions when tabs are closed
+- **Type Safety**: Full TypeScript support with proper typing throughout
+
+### Architecture
+
+```
+┌─────────────────┐    ┌─────────────────────────────────────┐    ┌─────────────────┐
+│   Web Page      │    │         Background Script          │    │ Content Script  │
+├─────────────────┤    ├─────────────────────────────────────┤    ├─────────────────┤
+│ WebObservable   │    │       RemoteSubjectManager          │    │ContentObservable│
+│                 │    │  ┌─────────────────────────────────┐ │    │                 │
+│ subscribe() ────┼───▶│  │ Message Routing & Queue Mgmt    │ │◄───┤ subscribe()     │
+│                 │◄───│  │                                 │ │    │                 │
+└─────────────────┘    │  └─────────────────────────────────┘ │    └─────────────────┘
+                       │               │                     │
+                       │  ┌─────────────▼─────────────────┐   │
+                       │  │        RemoteSubject          │   │
+                       │  │  (Pure State Management)      │   │
+                       │  │                               │   │
+                       │  │ next() ─────────────────────▶ │   │
+                       │  │ complete() ─────────────────▶ │   │
+                       │  └─────────────────────────────────┘   │
+                       └─────────────────────────────────────────┘
 ```
 
 ### Subscribing from Web Page
@@ -294,21 +338,27 @@ const observable = new ContentObservable(
 
 ### Observable Communication Patterns
 
-The Observable system supports multiple communication patterns:
+The Observable system supports multiple communication patterns with centralized management:
 
 ```typescript
 // Pattern 1: Background → Web Page (via Content Script bridge)
-// Background: RemoteSubject.next()
+// Background: RemoteSubjectManager creates and manages RemoteSubject
+// Background: RemoteSubject.next() → Manager routes to subscribers
 // Web Page: WebObservable.subscribe()
 
 // Pattern 2: Background → Content Script (direct)
-// Background: RemoteSubject.next()
+// Background: RemoteSubject.next() → Manager routes directly
 // Content Script: ContentObservable.subscribe()
 
 // Pattern 3: Background → Both Web Page and Content Script
-// Background: RemoteSubject.next() (broadcasts to all subscribers)
+// Background: RemoteSubject.next() → Manager broadcasts to all subscribers
 // Web Page: WebObservable.subscribe()
 // Content Script: ContentObservable.subscribe()
+
+// Pattern 4: Subscription before Subject Creation (Queue Management)
+// Subscriber: WebObservable.subscribe() → Manager queues subscription
+// Background: Later creates RemoteSubject → Manager processes queued subscriptions
+// Result: No missed initial values, proper subscription ordering
 ```
 
 ## Advanced Usage
@@ -364,10 +414,12 @@ if (!client.isDisposed()) {
 - **`ContentRPC`**: Message bridge between web pages and background scripts
 - **`WebRPCClient`**: RPC client for web pages
 - **`ContentRPCClient`**: Direct RPC client for content scripts
+- **`RemoteSubjectManager`**: Centralized observable message management system
 
 ### Observable Classes
 
-- **`RemoteSubject<T>`**: Observable subject that can broadcast to multiple subscribers
+- **`RemoteSubjectManager`**: Centralized message hub that manages subscriptions and message routing for all observables
+- **`RemoteSubject<T>`**: Pure state management observable that works with the manager to broadcast updates
 - **`WebObservable<T>`**: Observable subscriber for web pages
 - **`ContentObservable<T>`**: Observable subscriber for content scripts
 
@@ -404,8 +456,9 @@ if (!client.isDisposed()) {
 4. **Performance Optimization**
    - Avoid frequent small data transfers
    - Consider batching operations when possible
-   - Use Observable pattern for real-time data updates
+   - Use Observable pattern for real-time data updates with `RemoteSubjectManager` for efficient message routing
    - Implement caching strategies where appropriate
+   - The manager automatically handles subscription queuing to prevent race conditions
 
 5. **Security Considerations**
    - Validate input parameters in service implementations

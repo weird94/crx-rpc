@@ -227,13 +227,15 @@ interface RpcErrorDetails {
 
 ## Observable支持
 
-框架包含使用 `RemoteSubject` 和 `Observable` 模式的内置响应式数据流支持。
+框架包含使用 `RemoteSubject` 和 `Observable` 模式的内置响应式数据流支持，采用集中式消息管理系统。
 
-### 远程Subject（背景脚本）
+### RemoteSubjectManager 和 RemoteSubject（背景脚本）
+
+`RemoteSubjectManager` 作为集中式消息中心处理所有订阅管理和消息路由，而 `RemoteSubject` 专注于纯状态管理。
 
 ```typescript
 // background.ts
-import { BackgroundRPC, RemoteSubject, createIdentifier } from 'crx-rpc';
+import { BackgroundRPC, RemoteSubjectManager, createIdentifier } from 'crx-rpc';
 
 interface ICounterObservable {
     value: number;
@@ -243,8 +245,15 @@ const ICounterObservable = createIdentifier<ICounterObservable>('Counter');
 
 const rpc = new BackgroundRPC();
 
-// 创建可以向多个订阅者广播的远程subject
-const counterSubject = new RemoteSubject(ICounterObservable, 'main', { value: 0 });
+// 创建集中式subject管理器
+const subjectManager = new RemoteSubjectManager();
+
+// 通过管理器创建远程subject
+const counterSubject = subjectManager.createSubject(
+    ICounterObservable, 
+    'main', 
+    { value: 0 }
+);
 
 // 更新值并广播给所有订阅者
 setInterval(() => {
@@ -252,8 +261,43 @@ setInterval(() => {
     counterSubject.next(newValue);
 }, 1000);
 
+// 管理器处理：
+// - 消息路由和订阅管理
+// - 在subject创建前到达的订阅排队
+// - tab关闭时自动清理
+// - 向多个订阅者广播
+
 // 清理
-// counterSubject.dispose();
+// subjectManager.dispose(); // 这将处理所有subject
+```
+
+### RemoteSubjectManager 的核心特性
+
+- **集中式消息中心**: 所有observable相关的消息都由管理器处理
+- **队列管理**: 在subject创建前收到的订阅会被排队并稍后处理
+- **资源管理**: tab关闭时自动清理订阅
+- **类型安全**: 完整的TypeScript支持和恰当的类型检查
+
+### 架构
+
+```
+┌─────────────────┐    ┌─────────────────────────────────────┐    ┌─────────────────┐
+│      网页       │    │             背景脚本               │    │    内容脚本     │
+├─────────────────┤    ├─────────────────────────────────────┤    ├─────────────────┤
+│ WebObservable   │    │       RemoteSubjectManager          │    │ContentObservable│
+│                 │    │  ┌─────────────────────────────────┐ │    │                 │
+│ subscribe() ────┼───▶│  │   消息路由和队列管理            │ │◄───┤ subscribe()     │
+│                 │◄───│  │                                 │ │    │                 │
+└─────────────────┘    │  └─────────────────────────────────┘ │    └─────────────────┘
+                       │               │                     │
+                       │  ┌─────────────▼─────────────────┐   │
+                       │  │        RemoteSubject          │   │
+                       │  │      (纯状态管理)             │   │
+                       │  │                               │   │
+                       │  │ next() ─────────────────────▶ │   │
+                       │  │ complete() ─────────────────▶ │   │
+                       │  └─────────────────────────────────┘   │
+                       └─────────────────────────────────────────┘
 ```
 
 ### 从网页订阅
@@ -310,21 +354,27 @@ const observable = new ContentObservable(
 
 ### Observable通信模式
 
-Observable系统支持多种通信模式：
+Observable系统支持多种具有集中式管理的通信模式：
 
 ```typescript
 // 模式1: 背景脚本 → 网页 (通过内容脚本桥接器)
-// 背景脚本: RemoteSubject.next()
+// 背景脚本: RemoteSubjectManager创建和管理RemoteSubject
+// 背景脚本: RemoteSubject.next() → Manager路由到订阅者
 // 网页: WebObservable.subscribe()
 
 // 模式2: 背景脚本 → 内容脚本 (直接)
-// 背景脚本: RemoteSubject.next()
+// 背景脚本: RemoteSubject.next() → Manager直接路由
 // 内容脚本: ContentObservable.subscribe()
 
 // 模式3: 背景脚本 → 网页和内容脚本同时
-// 背景脚本: RemoteSubject.next() (广播给所有订阅者)
+// 背景脚本: RemoteSubject.next() → Manager广播给所有订阅者
 // 网页: WebObservable.subscribe()
 // 内容脚本: ContentObservable.subscribe()
+
+// 模式4: Subject创建前的订阅 (队列管理)
+// 订阅者: WebObservable.subscribe() → Manager将订阅排队
+// 背景脚本: 稍后创建RemoteSubject → Manager处理排队的订阅
+// 结果: 不会错过初始值，保证订阅顺序
 ```
 
 ## 高级用法
@@ -480,10 +530,12 @@ const [sum, user, file] = await Promise.all([
 - **`ContentRPC`**: 网页和背景脚本间的消息桥接器
 - **`WebRPCClient`**: 网页的RPC客户端
 - **`ContentRPCClient`**: 内容脚本的直接RPC客户端
+- **`RemoteSubjectManager`**: 集中式observable消息管理系统
 
 ### Observable类
 
-- **`RemoteSubject<T>`**: 可以向多个订阅者广播的Observable subject
+- **`RemoteSubjectManager`**: 管理订阅和消息路由的集中式消息中心
+- **`RemoteSubject<T>`**: 与管理器配合进行纯状态管理的Observable subject
 - **`WebObservable<T>`**: 网页的Observable订阅者
 - **`ContentObservable<T>`**: 内容脚本的Observable订阅者
 
@@ -520,8 +572,9 @@ const [sum, user, file] = await Promise.all([
 4. **性能优化**
    - 避免频繁的小数据传输
    - 可能时考虑批处理操作
-   - 对实时数据更新使用Observable模式
+   - 对实时数据更新使用Observable模式，通过 `RemoteSubjectManager` 进行高效消息路由
    - 在适当的地方实现缓存策略
+   - 管理器自动处理订阅排队以防止竞态条件
 
 5. **安全考虑**
    - 在服务实现中验证输入参数
