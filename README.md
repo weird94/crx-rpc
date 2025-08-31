@@ -415,21 +415,3 @@ if (!client.isDisposed()) {
 ## License
 
 MIT
-
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## Changelog
-
-### v1.0.0
-- Initial release
-- Type-safe RPC framework for Chrome Extensions
-- Support for web page ↔ content script ↔ background script communication
-- Built-in Observable support with RemoteSubject
-- Disposable pattern for resource management
-- Full TypeScript support with automatic proxy type generation

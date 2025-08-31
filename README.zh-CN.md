@@ -531,21 +531,3 @@ const [sum, user, file] = await Promise.all([
 ## 许可证
 
 MIT
-
-## 贡献
-
-1. Fork 这个仓库
-2. 创建您的功能分支 (`git checkout -b feature/amazing-feature`)
-3. 提交您的更改 (`git commit -m 'Add some amazing feature'`)
-4. 推送到分支 (`git push origin feature/amazing-feature`)
-5. 打开一个 Pull Request
-
-## 更新日志
-
-### v1.0.0
-- 初始发布
-- Chrome扩展的类型安全RPC框架
-- 支持网页 ↔ 内容脚本 ↔ 背景脚本通信
-- 内置Observable支持与RemoteSubject
-- 资源管理的Disposable模式
-- 完整的TypeScript支持与自动代理类型生成
