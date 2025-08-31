@@ -195,49 +195,6 @@ async function calculate() {
 - **BackgroundRPC**: 背景脚本中的服务注册表和处理器
 - **RPCClient**: 具有服务代理生成功能的基础客户端
 
-## 类型系统
-
-### 服务代理类型
-
-框架使用先进的TypeScript工具自动将服务接口转换为客户端代理类型：
-
-```typescript
-// 原始接口
-interface IMathService {
-    add(a: number, b: number): number; // 同步方法
-    asyncAdd(a: number, b: number): Promise<number>; // 异步方法
-}
-
-// 自动转换为客户端代理类型 (ServiceProxy<T>)
-interface MathServiceProxy {
-    add(a: number, b: number): Promise<number>; // 转换为异步
-    asyncAdd(a: number, b: number): Promise<number>; // 保持异步
-};
-```
-
-### 类型转换
-
-框架使用这些TypeScript工具类型：
-
-```typescript
-type FunctionArgs<T> = T extends (...args: infer A) => any ? A : never;
-type FunctionReturnType<T> = T extends (...args: any[]) => infer R ? R : never;
-
-type ServiceProxy<T> = {
-    [K in keyof T]: T[K] extends (...args: any[]) => any
-    ? (...args: FunctionArgs<T[K]>) => Promise<Awaited<FunctionReturnType<T[K]>>>
-    : never;
-};
-```
-
-### 类型安全保障
-
-- ✅ 方法参数类型检查
-- ✅ 使用 `Awaited<T>` 进行返回值类型推断
-- ✅ 编译时错误检测
-- ✅ IDE智能提示和自动完成
-- ✅ 跨RPC边界保留错误类型
-
 ## 错误处理
 
 框架保留错误详细信息，包括堆栈跟踪和错误类型：

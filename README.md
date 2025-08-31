@@ -179,49 +179,6 @@ async function calculate() {
 - **BackgroundRPC**: Service registry and handler in the background script
 - **RPCClient**: Base client with service proxy generation
 
-## Type System
-
-### Service Proxy Types
-
-The framework automatically converts service interfaces to client proxy types using advanced TypeScript utilities:
-
-```typescript
-// Original interface
-interface IMathService {
-    add(a: number, b: number): number; // Sync method
-    asyncAdd(a: number, b: number): Promise<number>; // Async method
-}
-
-// Auto-converted to client proxy type (ServiceProxy<T>)
-interface MathServiceProxy {
-    add(a: number, b: number): Promise<number>; // Converted to async
-    asyncAdd(a: number, b: number): Promise<number>; // Remains async
-};
-```
-
-### Type Transformation
-
-The framework uses these TypeScript utility types:
-
-```typescript
-type FunctionArgs<T> = T extends (...args: infer A) => any ? A : never;
-type FunctionReturnType<T> = T extends (...args: any[]) => infer R ? R : never;
-
-type ServiceProxy<T> = {
-    [K in keyof T]: T[K] extends (...args: any[]) => any
-    ? (...args: FunctionArgs<T[K]>) => Promise<Awaited<FunctionReturnType<T[K]>>>
-    : never;
-};
-```
-
-### Type Safety Guarantees
-
-- ✅ Method parameter type checking
-- ✅ Return value type inference with `Awaited<T>`
-- ✅ Compile-time error detection
-- ✅ IDE IntelliSense and auto-completion
-- ✅ Preserves error types across RPC boundaries
-
 ## Error Handling
 
 The framework preserves error details including stack traces and error types:
