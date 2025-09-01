@@ -67,8 +67,9 @@ class MathService implements IMathService {
     }
 }
 
-// Register service
-const rpc = new BackgroundRPC();
+// Register service with optional logging
+const rpc = new BackgroundRPC(true); // Enable logging
+// const rpc = new BackgroundRPC(); // Disable logging (default)
 rpc.register(IMathService, new MathService());
 ```
 
@@ -179,35 +180,40 @@ async function calculate() {
 - **BackgroundRPC**: Service registry and handler in the background script
 - **RPCClient**: Base client with service proxy generation
 
-## Error Handling
+## Logging Support
 
-The framework preserves error details including stack traces and error types:
+The framework includes built-in logging support for debugging and monitoring RPC calls.
 
-```typescript
-const client = new WebRPCClient();
-const mathService = client.createWebRPCService(IMathService);
-
-try {
-    const result = await mathService.divide(10, 0);
-} catch (error) {
-    console.error('RPC Error:', error.message);
-    console.error('Stack trace:', error.stack);
-    console.error('Error name:', error.name);
-    // Error preserves original stack trace and error type from the background script
-}
-```
-
-### Error Structure
-
-Errors are transmitted with full details:
+### Enable Logging
 
 ```typescript
-interface RpcErrorDetails {
-    message: string;
-    stack?: string;
-    name?: string;
-}
+// Enable logging in BackgroundRPC
+const rpc = new BackgroundRPC(true); // Enable logging
+// const rpc = new BackgroundRPC(); // Disable logging (default)
+
+// Example output:
+// [RPC] Call: MathService.add { id: "123", args: [5, 3], senderId: 456, timestamp: "2025-09-01T10:00:00.000Z" }
+// [RPC] Success: MathService.add { id: "123", result: 8, timestamp: "2025-09-01T10:00:00.001Z" }
+
+// For errors:
+// [RPC] Error: MathService.divide { id: "124", error: "Division by zero", timestamp: "2025-09-01T10:00:01.000Z" }
 ```
+
+### Log Output
+
+When logging is enabled, the following information is logged:
+
+- **Function Calls**: Service name, method name, arguments, sender ID, and timestamp
+- **Success Responses**: Service name, method name, result, and timestamp  
+- **Error Responses**: Service name, method name, error message, and timestamp
+- **Unknown Services/Methods**: Warnings for invalid service or method calls
+
+### Use Cases
+
+- **Development**: Debug RPC communication during development
+- **Production Monitoring**: Track RPC usage patterns and performance
+- **Troubleshooting**: Identify failed calls and error patterns
+- **Security Auditing**: Monitor RPC access patterns
 
 ## Observable Support
 

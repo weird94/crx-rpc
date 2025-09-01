@@ -62,13 +62,14 @@ class MathService implements IMathService {
     }
 
     async divide(a: number, b: number): Promise<number> {
-        if (b === 0) throw new Error('除零错误');
+        if (b === 0) throw new Error('Division by zero');
         return a / b;
     }
 }
 
-// 注册服务
-const rpc = new BackgroundRPC();
+// 注册服务，可选择启用日志
+const rpc = new BackgroundRPC(true); // 启用日志
+// const rpc = new BackgroundRPC(); // 禁用日志（默认）
 rpc.register(IMathService, new MathService());
 ```
 
@@ -195,35 +196,40 @@ async function calculate() {
 - **BackgroundRPC**: 背景脚本中的服务注册表和处理器
 - **RPCClient**: 具有服务代理生成功能的基础客户端
 
-## 错误处理
+## 日志支持
 
-框架保留错误详细信息，包括堆栈跟踪和错误类型：
+框架包含内置的日志支持，用于调试和监控RPC调用。
 
-```typescript
-const client = new WebRPCClient();
-const mathService = client.createWebRPCService(IMathService);
-
-try {
-    const result = await mathService.divide(10, 0);
-} catch (error) {
-    console.error('RPC错误:', error.message);
-    console.error('堆栈跟踪:', error.stack);
-    console.error('错误名称:', error.name);
-    // 错误保留了来自背景脚本的原始堆栈跟踪和错误类型
-}
-```
-
-### 错误结构
-
-错误会传输完整的详细信息：
+### 启用日志
 
 ```typescript
-interface RpcErrorDetails {
-    message: string;
-    stack?: string;
-    name?: string;
-}
+// 在BackgroundRPC中启用日志
+const rpc = new BackgroundRPC(true); // 启用日志
+// const rpc = new BackgroundRPC(); // 禁用日志（默认）
+
+// 示例输出：
+// [RPC] Call: MathService.add { id: "123", args: [5, 3], senderId: 456, timestamp: "2025-09-01T10:00:00.000Z" }
+// [RPC] Success: MathService.add { id: "123", result: 8, timestamp: "2025-09-01T10:00:00.001Z" }
+
+// 对于错误：
+// [RPC] Error: MathService.divide { id: "124", error: "Division by zero", timestamp: "2025-09-01T10:00:01.000Z" }
 ```
+
+### 日志输出
+
+启用日志时，会记录以下信息：
+
+- **函数调用**: 服务名、方法名、参数、发送者ID和时间戳
+- **成功响应**: 服务名、方法名、结果和时间戳  
+- **错误响应**: 服务名、方法名、错误消息和时间戳
+- **未知服务/方法**: 无效服务或方法调用的警告
+
+### 使用场景
+
+- **开发**: 在开发期间调试RPC通信
+- **生产监控**: 跟踪RPC使用模式和性能
+- **故障排除**: 识别失败的调用和错误模式
+- **安全审计**: 监控RPC访问模式
 
 ## Observable支持
 

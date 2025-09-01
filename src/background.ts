@@ -6,7 +6,7 @@ import { Disposable } from './disposable';
 export class BackgroundRPC extends Disposable {
     private services: Record<string, RpcService> = {};
 
-    constructor() {
+    constructor(private log: boolean = false) {
         super();
         const handler = ((msg: RpcRequest & { type?: string }, sender: chrome.runtime.MessageSender) => {
             if (msg.type !== RPC_EVENT_NAME) return;
@@ -25,7 +25,19 @@ export class BackgroundRPC extends Disposable {
             const { id, method, args, service } = msg;
             const serviceInstance = this.services[service];
 
+            if (this.log) {
+                console.log(`[RPC] Call: ${service}.${method}`, {
+                    id,
+                    args,
+                    senderId,
+                    timestamp: new Date().toISOString()
+                });
+            }
+
             if (!serviceInstance) {
+                if (this.log) {
+                    console.warn(`[RPC] Unknown service: ${service}`);
+                }
                 const resp: RpcResponse = {
                     id,
                     error: { message: `Unknown service: ${service}` },
@@ -37,6 +49,9 @@ export class BackgroundRPC extends Disposable {
             }
 
             if (!(method in serviceInstance)) {
+                if (this.log) {
+                    console.warn(`[RPC] Unknown method: ${service}.${method}`);
+                }
                 const resp: RpcResponse = {
                     id,
                     error: { message: `Unknown method: ${method}` },
@@ -49,22 +64,40 @@ export class BackgroundRPC extends Disposable {
 
             Promise.resolve()
                 .then(() => serviceInstance[method](...args))
-                .then((result) => sendResponse({
-                    id,
-                    result,
-                    service,
-                    method
-                }))
-                .catch((err) => sendResponse({
-                    id,
-                    error: {
-                        message: err.message,
-                        stack: err.stack,
-                        name: err.name
-                    },
-                    service,
-                    method
-                }));
+                .then((result) => {
+                    if (this.log) {
+                        console.log(`[RPC] Success: ${service}.${method}`, {
+                            id,
+                            result,
+                            timestamp: new Date().toISOString()
+                        });
+                    }
+                    sendResponse({
+                        id,
+                        result,
+                        service,
+                        method
+                    });
+                })
+                .catch((err) => {
+                    if (this.log) {
+                        console.error(`[RPC] Error: ${service}.${method}`, {
+                            id,
+                            error: err.message,
+                            timestamp: new Date().toISOString()
+                        });
+                    }
+                    sendResponse({
+                        id,
+                        error: {
+                            message: err.message,
+                            stack: err.stack,
+                            name: err.name
+                        },
+                        service,
+                        method
+                    });
+                });
 
             return true; // 异步 sendResponse
         });
