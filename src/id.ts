@@ -1,7 +1,3 @@
-// shared/utils/identifier.ts
-
-import { randomId } from "./tool";
-
 /**
  * Identifier 类型，既携带类型信息，又在运行时能唯一标识。
  */
@@ -16,6 +12,6 @@ export interface Identifier<T> {
  */
 export function createIdentifier<T>(key: string): Identifier<T> {
     return {
-        key: key + '__' + randomId(),
+        key,
     } as Identifier<T>;
 }
