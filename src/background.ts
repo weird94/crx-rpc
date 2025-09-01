@@ -10,7 +10,11 @@ export class BackgroundRPC extends Disposable {
         super();
         const handler = ((msg: RpcRequest & { type?: string }, sender: chrome.runtime.MessageSender) => {
             if (msg.type !== RPC_EVENT_NAME) return;
-            const senderId = sender.tab!.id!;
+            const senderId = sender.tab?.id;
+            if (!senderId) {
+                console.warn('Received RPC request from unknown sender, ignoring.', msg);
+                return;
+            }
             const sendResponse = (response: RpcResponse) => {
                 chrome.tabs.sendMessage(senderId, {
                     ...response,
@@ -130,8 +134,11 @@ export class RemoteSubjectManager extends Disposable {
         super();
 
         const handleMessage = (msg: RpcObservableSubscribeMessage, sender: chrome.runtime.MessageSender) => {
-            const senderId = sender.tab!.id!;
-            if (!senderId) return;
+            const senderId = sender.tab?.id;
+            if (!senderId) {
+                console.warn('Received RPC request from unknown sender, ignoring.', msg);
+                return;
+            }
 
             if (msg.type === SUBSCRIBABLE_OBSERVABLE) {
                 const { key } = msg;
