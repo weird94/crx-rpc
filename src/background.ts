@@ -27,15 +27,15 @@ export class BackgroundRPC extends Disposable {
 
             if (this.log) {
                 console.log(
-                    `%c[RPC]%c Call: %c${service}%c.%c${method}%c [%c${id}%c]`,
-                    'color: #6b46c1; font-weight: bold;', // [RPC] 紫色
-                    'color: #374151;', // Call: 灰色
-                    'color: #059669; font-weight: bold;', // service 绿色
-                    'color: #374151;', // .
-                    'color: #dc2626; font-weight: bold;', // method 红色
-                    'color: #374151;', // [
-                    'color: #7c3aed; font-weight: bold;', // id 紫色
-                    'color: #374151;', // ]
+                    `%c RPC %c Call: %c ${service} %c.%c ${method} %c [%c ${id} %c]`,
+                    'background: #6b46c1; color: white; font-weight: bold; padding: 2px 4px; border-radius: 3px;', // [RPC] 紫色背景
+                    'color: #6b7280; font-weight: 500;', // Call: 灰色
+                    'background: #059669; color: white; font-weight: bold; padding: 1px 4px; border-radius: 2px;', // service 绿色背景
+                    'color: #6b7280; font-weight: 500;', // .
+                    'background: #dc2626; color: white; font-weight: bold; padding: 1px 4px; border-radius: 2px;', // method 红色背景
+                    'color: #6b7280; font-weight: 500;', // [
+                    'background: #2563eb; color: white; font-weight: bold; padding: 1px 4px; border-radius: 2px;', // id 蓝色背景
+                    'color: #6b7280; font-weight: 500;', // ]
                     {
                         args,
                         senderId,
@@ -47,13 +47,13 @@ export class BackgroundRPC extends Disposable {
             if (!serviceInstance) {
                 if (this.log) {
                     console.warn(
-                        `%c[RPC]%c Unknown service: %c${service}%c [%c${id}%c]`,
-                        'color: #6b46c1; font-weight: bold;', // [RPC] 紫色
-                        'color: #d97706;', // Unknown service: 橙色
-                        'color: #059669; font-weight: bold;', // service 绿色
-                        'color: #374151;', // [
-                        'color: #7c3aed; font-weight: bold;', // id 紫色
-                        'color: #374151;', // ]
+                        `%c RPC %c Unknown service: %c ${service} %c [%c ${id} %c]`,
+                        'background: #6b46c1; color: white; font-weight: bold; padding: 2px 4px; border-radius: 3px;', // [RPC] 紫色背景
+                        'color: #d97706; font-weight: bold;', // Unknown service: 橙色
+                        'background: #059669; color: white; font-weight: bold; padding: 1px 4px; border-radius: 2px;', // service 绿色背景
+                        'color: #6b7280; font-weight: 500;', // [
+                        'background: #2563eb; color: white; font-weight: bold; padding: 1px 4px; border-radius: 2px;', // id 蓝色背景
+                        'color: #6b7280; font-weight: 500;', // ]
                         {
                             senderId,
                             timestamp: new Date().toISOString()
@@ -73,15 +73,15 @@ export class BackgroundRPC extends Disposable {
             if (!(method in serviceInstance)) {
                 if (this.log) {
                     console.warn(
-                        `%c[RPC]%c Unknown method: %c${service}%c.%c${method}%c [%c${id}%c]`,
-                        'color: #6b46c1; font-weight: bold;', // [RPC] 紫色
-                        'color: #d97706;', // Unknown method: 橙色
-                        'color: #059669; font-weight: bold;', // service 绿色
-                        'color: #374151;', // .
-                        'color: #dc2626; font-weight: bold;', // method 红色
-                        'color: #374151;', // [
-                        'color: #7c3aed; font-weight: bold;', // id 紫色
-                        'color: #374151;', // ]
+                        `%c RPC %c Unknown method: %c ${service} %c.%c ${method} %c [%c ${id} %c]`,
+                        'background: #6b46c1; color: white; font-weight: bold; padding: 2px 4px; border-radius: 3px;', // [RPC] 紫色背景
+                        'color: #d97706; font-weight: bold;', // Unknown method: 橙色
+                        'background: #059669; color: white; font-weight: bold; padding: 1px 4px; border-radius: 2px;', // service 绿色背景
+                        'color: #6b7280; font-weight: 500;', // .
+                        'background: #dc2626; color: white; font-weight: bold; padding: 1px 4px; border-radius: 2px;', // method 红色背景
+                        'color: #6b7280; font-weight: 500;', // [
+                        'background: #2563eb; color: white; font-weight: bold; padding: 1px 4px; border-radius: 2px;', // id 蓝色背景
+                        'color: #6b7280; font-weight: 500;', // ]
                         {
                             senderId,
                             timestamp: new Date().toISOString()
@@ -103,15 +103,15 @@ export class BackgroundRPC extends Disposable {
                 .then((result) => {
                     if (this.log) {
                         console.log(
-                            `%c[RPC]%c Success: %c${service}%c.%c${method}%c [%c${id}%c]`,
-                            'color: #6b46c1; font-weight: bold;', // [RPC] 紫色
-                            'color: #16a34a;', // Success: 绿色
-                            'color: #059669; font-weight: bold;', // service 绿色
-                            'color: #374151;', // .
-                            'color: #dc2626; font-weight: bold;', // method 红色
-                            'color: #374151;', // [
-                            'color: #7c3aed; font-weight: bold;', // id 紫色
-                            'color: #374151;', // ]
+                            `%c RPC %c Success: %c ${service} %c.%c ${method} %c [%c ${id} %c]`,
+                            'background: #6b46c1; color: white; font-weight: bold; padding: 2px 4px; border-radius: 3px;', // [RPC] 紫色背景
+                            'color: #16a34a; font-weight: bold;', // Success: 绿色
+                            'background: #059669; color: white; font-weight: bold; padding: 1px 4px; border-radius: 2px;', // service 绿色背景
+                            'color: #6b7280; font-weight: 500;', // .
+                            'background: #dc2626; color: white; font-weight: bold; padding: 1px 4px; border-radius: 2px;', // method 红色背景
+                            'color: #6b7280; font-weight: 500;', // [
+                            'background: #2563eb; color: white; font-weight: bold; padding: 1px 4px; border-radius: 2px;', // id 蓝色背景
+                            'color: #6b7280; font-weight: 500;', // ]
                             {
                                 result,
                                 timestamp: new Date().toISOString()
@@ -128,15 +128,15 @@ export class BackgroundRPC extends Disposable {
                 .catch((err) => {
                     if (this.log) {
                         console.error(
-                            `%c[RPC]%c Error: %c${service}%c.%c${method}%c [%c${id}%c]`,
-                            'color: #6b46c1; font-weight: bold;', // [RPC] 紫色
-                            'color: #dc2626;', // Error: 红色
-                            'color: #059669; font-weight: bold;', // service 绿色
-                            'color: #374151;', // .
-                            'color: #dc2626; font-weight: bold;', // method 红色
-                            'color: #374151;', // [
-                            'color: #7c3aed; font-weight: bold;', // id 紫色
-                            'color: #374151;', // ]
+                            `%c RPC %c Error: %c ${service} %c.%c ${method} %c [%c ${id} %c]`,
+                            'background: #6b46c1; color: white; font-weight: bold; padding: 2px 4px; border-radius: 3px;', // [RPC] 紫色背景
+                            'color: #dc2626; font-weight: bold;', // Error: 红色
+                            'background: #059669; color: white; font-weight: bold; padding: 1px 4px; border-radius: 2px;', // service 绿色背景
+                            'color: #6b7280; font-weight: 500;', // .
+                            'background: #dc2626; color: white; font-weight: bold; padding: 1px 4px; border-radius: 2px;', // method 红色背景
+                            'color: #6b7280; font-weight: 500;', // [
+                            'background: #2563eb; color: white; font-weight: bold; padding: 1px 4px; border-radius: 2px;', // id 蓝色背景
+                            'color: #6b7280; font-weight: 500;', // ]
                             {
                                 error: err.message,
                                 timestamp: new Date().toISOString()
@@ -223,18 +223,24 @@ export class RemoteSubjectManager extends Disposable {
         super();
 
         const handleMessage = (msg: RpcObservableSubscribeMessage, sender: chrome.runtime.MessageSender) => {
-            const senderId = sender.tab?.id;
-            if (!senderId) {
-                console.warn('Received RPC request from unknown sender, ignoring.', msg);
-                return;
-            }
+
 
             if (msg.type === SUBSCRIBABLE_OBSERVABLE) {
+                const senderId = sender.tab?.id;
+                if (!senderId) {
+                    console.warn('Received RPC request from unknown sender, ignoring.', msg);
+                    return;
+                }
                 const { key } = msg;
                 this.handleSubscription(key, senderId);
             }
 
             if (msg.type === UNSUBSCRIBE_OBSERVABLE) {
+                const senderId = sender.tab?.id;
+                if (!senderId) {
+                    console.warn('Received RPC request from unknown sender, ignoring.', msg);
+                    return;
+                }
                 const { key } = msg;
                 this.handleUnsubscription(key, senderId);
             }
