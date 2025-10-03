@@ -1,3 +1,4 @@
+import { createRuntimeMessageChannel, createTabMessageChannel, onTabRemoved } from '@webext-core/messaging';
 import type { Identifier } from './id';
 import { OBSERVABLE_EVENT, RPC_EVENT_NAME, RPC_RESPONSE_EVENT_NAME, SUBSCRIBABLE_OBSERVABLE, UNSUBSCRIBE_OBSERVABLE } from './const';
 import type { RpcRequest, RpcResponse, RpcService, SubjectLike, RpcObservableUpdateMessage, RpcObservableSubscribeMessage } from './types';
@@ -5,6 +6,8 @@ import { Disposable } from './disposable';
 
 export class BackgroundRPC extends Disposable {
     private services: Record<string, RpcService> = {};
+    private runtimeChannel = createRuntimeMessageChannel<any>();
+    private tabChannels = new Map<number, ReturnType<typeof createTabMessageChannel>>();
 
     constructor(private log: boolean = false) {
         super();
@@ -16,9 +19,11 @@ export class BackgroundRPC extends Disposable {
                 return;
             }
             const sendResponse = (response: RpcResponse) => {
-                chrome.tabs.sendMessage(senderId, {
+                this.getTabChannel(senderId).sendMessage({
                     ...response,
-                    type: RPC_RESPONSE_EVENT_NAME
+                    type: RPC_RESPONSE_EVENT_NAME,
+                }).catch((error) => {
+                    console.warn('Failed to deliver RPC response to tab', senderId, response, error);
                 });
             };
 
@@ -67,7 +72,7 @@ export class BackgroundRPC extends Disposable {
                     method,
                 };
                 sendResponse(resp);
-                return true;
+                return;
             }
 
             if (!(method in serviceInstance)) {
@@ -95,7 +100,7 @@ export class BackgroundRPC extends Disposable {
                     method,
                 };
                 sendResponse(resp);
-                return true;
+                return;
             }
 
             Promise.resolve()
@@ -155,17 +160,21 @@ export class BackgroundRPC extends Disposable {
                     });
                 });
 
-            return true; // 异步 sendResponse
         });
 
-        chrome.runtime.onMessage.addListener(handler);
-        this.disposeWithMe(() => {
-            chrome.runtime.onMessage.removeListener(handler);
-        });
+        const dispose = this.runtimeChannel.onMessage(handler);
+        this.disposeWithMe(dispose);
     }
 
     register<T>(service: Identifier<T>, serviceInstance: T) {
         this.services[service.key] = serviceInstance as unknown as RpcService;
+    }
+
+    private getTabChannel(tabId: number) {
+        if (!this.tabChannels.has(tabId)) {
+            this.tabChannels.set(tabId, createTabMessageChannel<any>(tabId));
+        }
+        return this.tabChannels.get(tabId)!;
     }
 }
 
@@ -218,6 +227,8 @@ export class RemoteSubjectManager extends Disposable {
     private subjects = new Map<string, RemoteSubject<any>>();
     private pendingSubscriptions = new Map<string, Set<number>>(); // key -> senderIds
     private activeSenders = new Map<string, Set<number>>(); // key -> senderIds
+    private runtimeChannel = createRuntimeMessageChannel<any>();
+    private tabChannels = new Map<number, ReturnType<typeof createTabMessageChannel>>();
 
     constructor() {
         super();
@@ -246,10 +257,8 @@ export class RemoteSubjectManager extends Disposable {
             }
         };
 
-        chrome.runtime.onMessage.addListener(handleMessage);
-        this.disposeWithMe(() => {
-            chrome.runtime.onMessage.removeListener(handleMessage);
-        });
+        const disposeMessage = this.runtimeChannel.onMessage(handleMessage);
+        this.disposeWithMe(disposeMessage);
 
         const handleTabRemove = (tabId: number) => {
             // 清理该 tab 的所有订阅
@@ -259,12 +268,11 @@ export class RemoteSubjectManager extends Disposable {
             this.pendingSubscriptions.forEach((senders) => {
                 senders.delete(tabId);
             });
+            this.tabChannels.delete(tabId);
         };
 
-        chrome.tabs.onRemoved.addListener(handleTabRemove);
-        this.disposeWithMe(() => {
-            chrome.tabs.onRemoved.removeListener(handleTabRemove);
-        });
+        const disposeRemoved = onTabRemoved(handleTabRemove);
+        this.disposeWithMe(disposeRemoved);
     }
 
     private handleSubscription(key: string, senderId: number) {
@@ -278,10 +286,13 @@ export class RemoteSubjectManager extends Disposable {
             this.activeSenders.get(key)!.add(senderId);
 
             // 发送初始值
-            chrome.tabs.sendMessage(senderId, {
+            this.getTabChannel(senderId).sendMessage({
                 operation: 'next',
                 key,
                 value: subject.getInitialValue(),
+                type: OBSERVABLE_EVENT,
+            }).catch((error) => {
+                console.warn('Failed to send initial observable value to tab', senderId, key, error);
             });
         } else {
             // Subject 尚未创建，缓存到待处理队列
@@ -319,7 +330,9 @@ export class RemoteSubjectManager extends Disposable {
         const senders = this.activeSenders.get(key);
         if (senders) {
             senders.forEach(senderId => {
-                chrome.tabs.sendMessage(senderId, message);
+                this.getTabChannel(senderId).sendMessage(message).catch((error) => {
+                    console.warn('Failed to send observable update to tab', senderId, key, error);
+                });
             });
         }
     }
@@ -340,10 +353,13 @@ export class RemoteSubjectManager extends Disposable {
             pendingSenders.forEach(senderId => {
                 activeSenders.add(senderId);
                 // 发送初始值
-                chrome.tabs.sendMessage(senderId, {
+                this.getTabChannel(senderId).sendMessage({
                     operation: 'next',
                     key,
                     value: initialValue,
+                    type: OBSERVABLE_EVENT,
+                }).catch((error) => {
+                    console.warn('Failed to send buffered observable value to tab', senderId, key, error);
                 });
             });
 
@@ -368,5 +384,12 @@ export class RemoteSubjectManager extends Disposable {
             this.activeSenders.delete(key);
             this.pendingSubscriptions.delete(key);
         }
+    }
+
+    private getTabChannel(tabId: number) {
+        if (!this.tabChannels.has(tabId)) {
+            this.tabChannels.set(tabId, createTabMessageChannel<any>(tabId));
+        }
+        return this.tabChannels.get(tabId)!;
     }
 }

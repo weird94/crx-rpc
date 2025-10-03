@@ -196,6 +196,70 @@ async function calculate() {
 - **BackgroundRPC**: 背景脚本中的服务注册表和处理器
 - **RPCClient**: 具有服务代理生成功能的基础客户端
 
+## 扩展：按 tabId 调用内容脚本/网页
+
+- **每个 tab 创建一个 RPC 客户端实例**：封装一个基于 [`@webext-core/messaging`](./packages/webext-core-messaging/index.js) 的 `TabMessageAdapter`，自动在 `browser.*` 与 `chrome.*` API 之间适配，实现跨浏览器的消息投递。
+- **在内容脚本侧注册服务**：实现一个与 `BackgroundRPC` 对称的处理器，监听来自背景页的 `RPC_EVENT_NAME`，执行本地或网页方法，并通过同一套 `@webext-core/messaging` 封装回传结果。
+- **需要转发到网页时复用桥接器**：由内容脚本继续利用 `ContentRPC` 把调用抛给页面，再把响应一路传回背景页。
+- **调用流程**：背景页创建 `new RPCClient(new TabMessageAdapter(tabId))`，生成远程服务代理并直接 `await service.method()`；内容脚本/网页完成实际逻辑并返回结果。
+
+## 在内容脚本中提供服务（背景 → Tab）
+
+### 1. 在内容脚本里注册服务
+
+```typescript
+// content.ts
+import { ContentRPCHost, createIdentifier } from 'crx-rpc';
+
+interface IPageInfoService {
+    ping(name: string): Promise<string>;
+}
+
+export const IPageInfoService = createIdentifier<IPageInfoService>('PageInfoService');
+
+const host = new ContentRPCHost();
+
+host.register(IPageInfoService, {
+    async ping(name: string) {
+        // 这里的逻辑运行在 tab（内容脚本 / 网页）中
+        return `pong from tab: ${name}`;
+    },
+});
+
+// 如需继续转发到网页，可同时创建 ContentRPC 桥接器
+// const bridge = new ContentRPC();
+```
+
+`ContentRPCHost` 与 `BackgroundRPC` 对称，不过它监听来自背景页的调用。
+注册到 host 的任何服务都可以被背景页通过 RPC 调用。
+
+### 2. 在背景页调用指定 tab 的服务
+
+```typescript
+// background.ts
+import { TabRPCClient } from 'crx-rpc';
+import { IPageInfoService } from './services/page-info';
+
+async function callContentService(tabId: number) {
+    const client = new TabRPCClient(tabId);
+    const pageInfo = client.createWebRPCService(IPageInfoService);
+
+    const result = await pageInfo.ping('developer');
+
+    client.dispose(); // 调用完成后记得清理监听
+    return result;
+}
+```
+
+`TabRPCClient` 内部的 `TabMessageAdapter` 同样依赖
+[`@webext-core/messaging`](./packages/webext-core-messaging/index.js) 自动选择 Promise 化的
+`browser.*` 或回调式的 `chrome.*` API，实现跨浏览器兼容的定向通信。它与其他
+`RPCClient` 一样，可以复用相同的服务标识符来调用内容脚本中的服务。
+
+> **提示：** `ContentRPCHost` 与 `ContentRPC` 也复用这一消息封装，因此即使在仅提供
+> `browser.runtime` Promise API 的浏览器中，背景页与内容脚本之间的调用仍然可以正
+> 常工作。
+
 ## 日志支持
 
 框架包含内置的日志支持，用于调试和监控RPC调用。
