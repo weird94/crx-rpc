@@ -1,6 +1,6 @@
-import { BaseObservable, RPCClient } from "./client";
-import { Identifier } from "./id";
-import { IMessageAdapter } from "./types";
+import { BaseObservable, RPCClient } from "../client";
+import { Identifier } from "../id";
+import { IMessageAdapter } from "../types";
 
 export const webMessageAdapter: IMessageAdapter = {
     onMessage<T>(type: string, callback: (message: T) => void) {

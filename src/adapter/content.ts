@@ -1,9 +1,9 @@
 import { createRuntimeMessageChannel } from '@webext-core/messaging';
-import { BaseObservable, RPCClient } from './client';
-import { OBSERVABLE_EVENT, RPC_EVENT_NAME, RPC_RESPONSE_EVENT_NAME, SUBSCRIBABLE_OBSERVABLE, UNSUBSCRIBE_OBSERVABLE } from './const';
-import { Disposable } from './disposable';
-import { Identifier } from './id';
-import type { IMessageAdapter, RpcRequest, RpcResponse, RpcService } from './types';
+import { BaseObservable, RPCClient } from '../client';
+import { OBSERVABLE_EVENT, RPC_EVENT_NAME, RPC_RESPONSE_EVENT_NAME, SUBSCRIBABLE_OBSERVABLE, UNSUBSCRIBE_OBSERVABLE } from '../const';
+import { Disposable } from '../disposable';
+import { Identifier } from '../id';
+import type { IMessageAdapter, RpcRequest, RpcResponse, RpcService } from '../types';
 
 const WEB_TO_BACKGROUND = [RPC_EVENT_NAME, SUBSCRIBABLE_OBSERVABLE, UNSUBSCRIBE_OBSERVABLE];
 const BACKGROUND_TO_WEB = [RPC_RESPONSE_EVENT_NAME, OBSERVABLE_EVENT];
