@@ -335,24 +335,36 @@ setInterval(() => {
 
 ### Architecture
 
-```
-┌─────────────────┐    ┌──────────────────────────────────────┐    ┌─────────────────┐
-│   Web Page      │    │         Background Script            │    │ Content Script  │
-├─────────────────┤    ├──────────────────────────────────────┤    ├─────────────────┤
-│ WebObservable   │    │       RemoteSubjectManager           │    │ContentObservable│
-│                 │    │  ┌─────────────────────────────────┐ │    │                 │
-│ subscribe() ────┼───▶│  │ Message Routing & Queue Mgmt    │ │◄───┤ subscribe()     │
-│                 │◄───│  │                                 │ │    │                 │
-└─────────────────┘    │  └─────────────────────────────────┘ │    └─────────────────┘
-                       │                │                     │
-                       │  ┌─────────────▼─────────────────┐   │
-                       │  │        RemoteSubject          │   │
-                       │  │  (Pure State Management)      │   │
-                       │  │                               │   │
-                       │  │ next() ─────────────────────▶ │   │
-                       │  │ complete() ─────────────────▶ │   │
-                       │  └───────────────────────────────┘   │
-                       └──────────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph WebPage["Web Page"]
+        WO[WebObservable<br/>.subscribe]
+    end
+    
+    subgraph Background["Background Script"]
+        RSM[RemoteSubjectManager<br/>Message Routing & Queue Mgmt]
+        RS[RemoteSubject<br/>Pure State Management<br/>.next / .complete]
+    end
+    
+    subgraph Content["Content Script"]
+        CO[ContentObservable<br/>.subscribe]
+    end
+    
+    subgraph ExtPage["Extension Page"]
+        EO[ExtPageObservable<br/>.subscribe]
+    end
+    
+    WO <-->|Subscribe/Updates| RSM
+    CO <-->|Subscribe/Updates| RSM
+    EO <-->|Subscribe/Updates| RSM
+    RSM -.->|Manages| RS
+    RS -.->|Broadcast to<br/>all subscribers| RSM
+    
+    style RSM fill:#fff4e6
+    style RS fill:#ffe6f0
+    style WO fill:#e1f5ff
+    style CO fill:#e1f5ff
+    style EO fill:#e1f5ff
 ```
 
 ### Subscribing from Web Page

@@ -1,6 +1,6 @@
 {
     "name": "crx-rpc",
-    "version": "1.0.8",
+    "version": "2.0.0",
     "description": "A lightweight RPC framework for Chrome Extension (background <-> content <-> web)",
     "repository": {
         "type": "git",

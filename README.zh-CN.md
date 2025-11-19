@@ -381,24 +381,36 @@ setInterval(() => {
 
 ### 架构
 
-```
-┌─────────────────┐    ┌─────────────────────────────────────┐    ┌─────────────────┐
-│      网页        │    │             背景脚本                 │    │    内容脚本       │
-├─────────────────┤    ├─────────────────────────────────────┤    ├─────────────────┤
-│ WebObservable   │    │       RemoteSubjectManager          │    │ContentObservable│
-│                 │    │  ┌─────────────────────────────────┐│    │                 │
-│ subscribe() ────┼───▶│  │   消息路由和队列管理               │ │◄──┤ subscribe()     │
-│                 │◄───│  │                                 │ │   │                 │
-└─────────────────┘    │  └─────────────────────────────────┘ │   └─────────────────┘
-                       │               │                      │
-                       │  ┌─────────────▼─────────────────┐   │
-                       │  │        RemoteSubject          │   │
-                       │  │      (纯状态管理)               │   │
-                       │  │                               │   │
-                       │  │ next() ─────────────────────▶ │   │
-                       │  │ complete() ─────────────────▶ │   │
-                       │  └───────────────────────────────┘   │
-                       └──────────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph WebPage["网页"]
+        WO[WebObservable<br/>.subscribe]
+    end
+    
+    subgraph Background["背景脚本"]
+        RSM[RemoteSubjectManager<br/>消息路由和队列管理]
+        RS[RemoteSubject<br/>纯状态管理<br/>.next / .complete]
+    end
+    
+    subgraph Content["内容脚本"]
+        CO[ContentObservable<br/>.subscribe]
+    end
+    
+    subgraph ExtPage["扩展页面"]
+        EO[ExtPageObservable<br/>.subscribe]
+    end
+    
+    WO <-->|订阅/更新| RSM
+    CO <-->|订阅/更新| RSM
+    EO <-->|订阅/更新| RSM
+    RSM -.->|管理| RS
+    RS -.->|广播给<br/>所有订阅者| RSM
+    
+    style RSM fill:#fff4e6
+    style RS fill:#ffe6f0
+    style WO fill:#e1f5ff
+    style CO fill:#e1f5ff
+    style EO fill:#e1f5ff
 ```
 
 ### 从网页订阅
