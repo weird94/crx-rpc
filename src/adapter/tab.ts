@@ -1,7 +1,7 @@
 import { createRuntimeMessageChannel, createTabMessageChannel } from '@webext-core/messaging';
-import { RPCClient } from './client';
-import { Disposable } from './disposable';
-import type { IMessageAdapter } from './types';
+import { RPCClient } from '../client';
+import { Disposable } from '../disposable';
+import type { IMessageAdapter } from '../types';
 
 export class TabMessageAdapter extends Disposable implements IMessageAdapter {
     private runtimeChannel = createRuntimeMessageChannel<any>();

@@ -157,20 +157,85 @@ async function calculate() {
 
 ## Architecture
 
-### Hybrid Mode (Both Bridge + Direct)
+### Complete Communication Topology
+
+```mermaid
+graph TB
+    subgraph WebPage["Web Page Context"]
+        WC[WebRPCClient]
+        WO[WebObservable]
+    end
+    
+    subgraph ContentScript["Content Script Context"]
+        CR[ContentRPC<br/>Bridge Mode]
+        CC[ContentRPCClient<br/>Direct Mode]
+        CO[ContentObservable]
+    end
+    
+    subgraph Background["Background Script Context"]
+        BR[BackgroundRPC]
+        MS[MathService]
+        US[UserService]
+        RS[RemoteSubject]
+        RSM[RemoteSubjectManager]
+    end
+    
+    subgraph ExtPage["Extension Page Context<br/>(Popup/Options/Sidepanel)"]
+        EC[ExtPageRPCClient]
+        EO[ExtPageObservable]
+    end
+    
+    subgraph TabContext["Tab-specific Access"]
+        TC[TabRPCClient]
+    end
+    
+    %% RPC Calls
+    WC -->|"CustomEvent<br/>.add(1,2)"| CR
+    CR -->|"chrome.runtime<br/>Forward"| BR
+    CC -->|"chrome.runtime<br/>.multiply(2,3)"| BR
+    EC -->|"chrome.runtime<br/>.divide(10,2)"| BR
+    TC -->|"chrome.tabs<br/>Access Content Service"| CC
+    
+    BR -->|Response| CR
+    CR -->|CustomEvent| WC
+    BR -->|Response| CC
+    BR -->|Response| EC
+    
+    BR -.->|Manages| MS
+    BR -.->|Manages| US
+    
+    %% Observable Streams
+    WO -.->|Subscribe| CR
+    CR -.->|Forward| RSM
+    CO -.->|Subscribe| RSM
+    EO -.->|Subscribe| RSM
+    RSM -.->|Broadcast| RS
+    RS -.->|Updates| CR
+    CR -.->|Updates| WO
+    RS -.->|Updates| CO
+    RS -.->|Updates| EO
+    
+    style WC fill:#e1f5ff
+    style CC fill:#e1f5ff
+    style EC fill:#e1f5ff
+    style TC fill:#e1f5ff
+    style BR fill:#fff4e6
+    style MS fill:#f0f0f0
+    style US fill:#f0f0f0
+    style RS fill:#ffe6f0
+    style RSM fill:#ffe6f0
+    style CR fill:#e8f5e9
 ```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Web Page      │    │ Content Script  │    │ Background      │
-│                 │    │ (Bridge+Client) │    │ Script          │
-├─────────────────┤    ├─────────────────┤    ├─────────────────┤
-│ WebRPCClient    │    │   ContentRPC    │    │ BackgroundRPC   │
-│                 │    │      +          │    │                 │
-│ mathService ────┼───▶│ContentRPCClient │◄──▶│ MathService     │
-│ .add(1,2)       │◄───│                 │    │ UserService     │
-│                 │    │ userService     │    │                 │
-│                 │    │ .getUser() ─────┼───▶│                 │
-└─────────────────┘    └─────────────────┘◄───└─────────────────┘
-```
+
+### Communication Paths
+
+| Path | Method | Description |
+|------|--------|-------------|
+| **Web Page → Background** | CustomEvent + chrome.runtime | Through ContentRPC bridge |
+| **Content Script → Background** | chrome.runtime | Direct communication |
+| **Extension Page → Background** | chrome.runtime | Direct communication |
+| **Extension Page → Content Script** | chrome.tabs + TabRPCClient | Tab-specific access |
+| **Background → All Contexts** | RemoteSubject broadcast | Real-time data streaming |
 
 ### Key Components
 
@@ -342,6 +407,34 @@ const observable = new ContentObservable(
 // observable.dispose();
 ```
 
+### Subscribing from Extension Page
+
+```typescript
+// popup.ts / options.ts
+import { ExtPageObservable, createIdentifier } from 'crx-rpc';
+
+interface ICounterObservable {
+    value: number;
+}
+
+const ICounterObservable = createIdentifier<ICounterObservable>('Counter');
+
+// Extension page can subscribe to background observables
+const observable = new ExtPageObservable(
+    ICounterObservable,
+    'main',
+    (value) => {
+        console.log('Counter from extension page:', value.value);
+        document.getElementById('counter').textContent = value.value.toString();
+    }
+);
+
+// Cleanup when done
+window.addEventListener('unload', () => {
+    observable.dispose();
+});
+```
+
 ### Observable Communication Patterns
 
 The Observable system supports multiple communication patterns with centralized management:
@@ -391,6 +484,94 @@ function cleanup() {
 if (!client.isDisposed()) {
     const service = client.createWebRPCService(IMathService);
     // Use service...
+}
+```
+
+### Extension Page Accessing Content Script Services
+
+Extension pages can access content script services using `TabRPCClient` by specifying the target tab ID:
+
+```typescript
+// popup.ts
+import { TabRPCClient } from 'crx-rpc';
+import { IContentService } from './services';
+
+// Get current active tab
+const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+if (tab.id) {
+    // Create RPC client for specific tab
+    const tabClient = new TabRPCClient(tab.id);
+    
+    // Access content script services in that tab
+    const contentService = tabClient.createWebRPCService(IContentService);
+    
+    // Call content script methods
+    const result = await contentService.getDOMInfo();
+    console.log('DOM info from content script:', result);
+    
+    // Cleanup when done
+    window.addEventListener('unload', () => {
+        tabClient.dispose();
+    });
+}
+```
+
+#### Use Cases for Extension Page → Content Script Communication:
+
+1. **DOM Inspection**: Popup queries content script for page information
+2. **User Actions**: Options page triggers content script actions on specific tabs
+3. **Multi-tab Management**: Sidepanel coordinates actions across multiple tabs
+4. **Live Preview**: Extension page gets real-time updates from content script
+
+#### Complete Example: Popup with Tab-specific Services
+
+```typescript
+// content.ts - Register services in content script
+import { ContentRPCHost } from 'crx-rpc';
+import { IPageService } from './services';
+
+class PageService implements IPageService {
+    async getTitle(): Promise<string> {
+        return document.title;
+    }
+    
+    async getSelection(): Promise<string> {
+        return window.getSelection()?.toString() || '';
+    }
+    
+    async highlightText(text: string): Promise<void> {
+        // Highlight logic...
+    }
+}
+
+const contentHost = new ContentRPCHost();
+contentHost.register(IPageService, new PageService());
+
+// popup.ts - Access content script from popup
+import { TabRPCClient, ExtPageRPCClient } from 'crx-rpc';
+import { IPageService, IMathService } from './services';
+
+// Access background services
+const bgClient = new ExtPageRPCClient();
+const mathService = bgClient.createWebRPCService(IMathService);
+
+// Access content script services in active tab
+const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+if (tab.id) {
+    const tabClient = new TabRPCClient(tab.id);
+    const pageService = tabClient.createWebRPCService(IPageService);
+    
+    // Get page info from content script
+    const title = await pageService.getTitle();
+    const selection = await pageService.getSelection();
+    
+    // Process with background service
+    const result = await mathService.calculate(selection.length);
+    
+    // Update popup UI
+    document.getElementById('title').textContent = title;
+    document.getElementById('result').textContent = result.toString();
 }
 ```
 

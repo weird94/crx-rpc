@@ -186,23 +186,87 @@ async function calculate() {
 
 ## 架构
 
+### 完整通信拓扑图
+
+```mermaid
+graph TB
+    subgraph WebPage["网页上下文"]
+        WC[WebRPCClient]
+        WO[WebObservable]
+    end
+    
+    subgraph ContentScript["内容脚本上下文"]
+        CR[ContentRPC<br/>桥接模式]
+        CC[ContentRPCClient<br/>直接模式]
+        CO[ContentObservable]
+    end
+    
+    subgraph Background["背景脚本上下文"]
+        BR[BackgroundRPC]
+        MS[MathService]
+        US[UserService]
+        RS[RemoteSubject]
+        RSM[RemoteSubjectManager]
+    end
+    
+    subgraph ExtPage["扩展页面上下文<br/>(Popup/Options/Sidepanel)"]
+        EC[ExtPageRPCClient]
+        EO[ExtPageObservable]
+    end
+    
+    subgraph TabContext["标签页特定访问"]
+        TC[TabRPCClient]
+    end
+    
+    %% RPC 调用
+    WC -->|"CustomEvent<br/>.add(1,2)"| CR
+    CR -->|"chrome.runtime<br/>转发"| BR
+    CC -->|"chrome.runtime<br/>.multiply(2,3)"| BR
+    EC -->|"chrome.runtime<br/>.divide(10,2)"| BR
+    TC -->|"chrome.tabs<br/>访问内容服务"| CC
+    
+    BR -->|响应| CR
+    CR -->|CustomEvent| WC
+    BR -->|响应| CC
+    BR -->|响应| EC
+    
+    BR -.->|管理| MS
+    BR -.->|管理| US
+    
+    %% Observable 数据流
+    WO -.->|订阅| CR
+    CR -.->|转发| RSM
+    CO -.->|订阅| RSM
+    EO -.->|订阅| RSM
+    RSM -.->|广播| RS
+    RS -.->|更新| CR
+    CR -.->|更新| WO
+    RS -.->|更新| CO
+    RS -.->|更新| EO
+    
+    style WC fill:#e1f5ff
+    style CC fill:#e1f5ff
+    style EC fill:#e1f5ff
+    style TC fill:#e1f5ff
+    style BR fill:#fff4e6
+    style MS fill:#f0f0f0
+    style US fill:#f0f0f0
+    style RS fill:#ffe6f0
+    style RSM fill:#ffe6f0
+    style CR fill:#e8f5e9
 ```
-网页               内容脚本            背景脚本               扩展页面
-┌─────────────┐   ┌─────────────────┐   ┌─────────────────┐   ┌──────────────────┐
-│ WebRPCClient│──▶│   ContentRPC    │──▶│  BackgroundRPC  │◀──│ExtPageRPCClient  │
-│             │   │   (桥接器)      │   │                 │   │  (Popup/Options) │
-│ 代理        │   │                 │   │ 服务            │   │                  │
-│ 服务        │   │ MessageAdapter  │   │ 注册表          │   │ 代理服务         │
-│ .add(1, 2)  │   │                 │   │                 │   │ .add(3, 4)       │
-└─────────────┘   └─────────────────┘   └─────────────────┘   └──────────────────┘
-        │                  │                       ▲                      │
-        │  CustomEvent     │  chrome.runtime      │     chrome.runtime   │
-        │                  │  Messages            │       Messages       │
-        └──────────────────┴──────────────────────┴──────────────────────┘
-                           │
-                    ┌─────────────────┐
-                    │ContentRPCClient │
-                    │   (直接)        │
+
+### 通信路径
+
+| 路径 | 方式 | 描述 |
+|------|------|------|
+| **网页 → 背景脚本** | CustomEvent + chrome.runtime | 通过 ContentRPC 桥接 |
+| **内容脚本 → 背景脚本** | chrome.runtime | 直接通信 |
+| **扩展页面 → 背景脚本** | chrome.runtime | 直接通信 |
+| **扩展页面 → 内容脚本** | chrome.tabs + TabRPCClient | 标签页特定访问 |
+| **背景脚本 → 所有上下文** | RemoteSubject 广播 | 实时数据流 |
+
+### 核心组件
                     │                 │
                     │ 代理服务        │
                     │ .subtract(5,2)  │
@@ -573,6 +637,94 @@ window.addEventListener('unload', () => {
 3. **实时更新**: 订阅observables获取实时数据推送
 4. **用户设置**: 在options页面中读取/保存配置
 5. **状态同步**: 与background保持状态同步
+
+### 扩展页面访问内容脚本服务
+
+扩展页面可以使用 `TabRPCClient` 通过指定 tab ID 来访问内容脚本的服务:
+
+```typescript
+// popup.ts
+import { TabRPCClient } from 'crx-rpc';
+import { IContentService } from './services';
+
+// 获取当前活动标签页
+const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+if (tab.id) {
+    // 为特定 tab 创建 RPC 客户端
+    const tabClient = new TabRPCClient(tab.id);
+    
+    // 访问该 tab 中的内容脚本服务
+    const contentService = tabClient.createWebRPCService(IContentService);
+    
+    // 调用内容脚本方法
+    const result = await contentService.getDOMInfo();
+    console.log('来自内容脚本的 DOM 信息:', result);
+    
+    // 完成时清理
+    window.addEventListener('unload', () => {
+        tabClient.dispose();
+    });
+}
+```
+
+#### 扩展页面 → 内容脚本通信的使用场景:
+
+1. **DOM 检查**: Popup 查询内容脚本获取页面信息
+2. **用户操作**: Options 页面触发特定标签页的内容脚本操作
+3. **多标签管理**: Sidepanel 协调多个标签页的操作
+4. **实时预览**: 扩展页面从内容脚本获取实时更新
+
+#### 完整示例: Popup 与标签页特定服务交互
+
+```typescript
+// content.ts - 在内容脚本中注册服务
+import { ContentRPCHost } from 'crx-rpc';
+import { IPageService } from './services';
+
+class PageService implements IPageService {
+    async getTitle(): Promise<string> {
+        return document.title;
+    }
+    
+    async getSelection(): Promise<string> {
+        return window.getSelection()?.toString() || '';
+    }
+    
+    async highlightText(text: string): Promise<void> {
+        // 高亮逻辑...
+    }
+}
+
+const contentHost = new ContentRPCHost();
+contentHost.register(IPageService, new PageService());
+
+// popup.ts - 从 popup 访问内容脚本
+import { TabRPCClient, ExtPageRPCClient } from 'crx-rpc';
+import { IPageService, IMathService } from './services';
+
+// 访问背景服务
+const bgClient = new ExtPageRPCClient();
+const mathService = bgClient.createWebRPCService(IMathService);
+
+// 访问活动标签页中的内容脚本服务
+const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+if (tab.id) {
+    const tabClient = new TabRPCClient(tab.id);
+    const pageService = tabClient.createWebRPCService(IPageService);
+    
+    // 从内容脚本获取页面信息
+    const title = await pageService.getTitle();
+    const selection = await pageService.getSelection();
+    
+    // 使用背景服务处理
+    const result = await mathService.calculate(selection.length);
+    
+    // 更新 popup UI
+    document.getElementById('title').textContent = title;
+    document.getElementById('result').textContent = result.toString();
+}
+```
 
 ### 复杂数据类型
 
