@@ -1,8 +1,13 @@
+export type RpcTo = 'content' | 'background'
+export type RpcFrom = 'content' | 'wxt-page' | 'web'
+
 export interface RpcRequest {
     id: string;
     method: string;
     service: string;
     args: any[];
+    to: RpcTo
+    from: RpcFrom
 }
 
 export interface RpcResponse {
@@ -11,6 +16,7 @@ export interface RpcResponse {
     error?: { message: string; stack?: string; name?: string };
     service: string;
     method: string;
+    from: RpcFrom
 }
 
 export type RpcHandler = (...args: any[]) => Promise<any> | any;

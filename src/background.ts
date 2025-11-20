@@ -1,9 +1,9 @@
-import type { Identifier } from '../id';
-import { OBSERVABLE_EVENT, RPC_EVENT_NAME, RPC_RESPONSE_EVENT_NAME, SUBSCRIBABLE_OBSERVABLE, UNSUBSCRIBE_OBSERVABLE } from '../const';
-import type { RpcRequest, RpcResponse, RpcService, SubjectLike, RpcObservableUpdateMessage, RpcObservableSubscribeMessage } from '../types';
-import { Disposable } from '../disposable';
+import type { Identifier } from './id';
+import { OBSERVABLE_EVENT, RPC_EVENT_NAME, RPC_RESPONSE_EVENT_NAME, SUBSCRIBABLE_OBSERVABLE, UNSUBSCRIBE_OBSERVABLE } from './const';
+import type { RpcRequest, RpcResponse, RpcService, SubjectLike, RpcObservableUpdateMessage, RpcObservableSubscribeMessage } from './types';
+import { Disposable } from './disposable';
 
-export class BackgroundRPC extends Disposable {
+export class BackgroundRPCHost extends Disposable {
     private services: Record<string, RpcService> = {};
 
     constructor(private log: boolean = false) {
@@ -15,10 +15,11 @@ export class BackgroundRPC extends Disposable {
                 console.warn('Received RPC request from unknown sender, ignoring.', msg);
                 return;
             }
-            const sendResponse = (response: RpcResponse) => {
+            const sendResponse = (response: Omit<RpcResponse, 'from'>) => {
                 chrome.tabs.sendMessage(senderId, {
                     ...response,
-                    type: RPC_RESPONSE_EVENT_NAME
+                    type: RPC_RESPONSE_EVENT_NAME,
+                    from: msg.from
                 });
             };
 
@@ -60,7 +61,7 @@ export class BackgroundRPC extends Disposable {
                         }
                     );
                 }
-                const resp: RpcResponse = {
+                const resp = {
                     id,
                     error: { message: `Unknown service: ${service}` },
                     service,
@@ -88,7 +89,7 @@ export class BackgroundRPC extends Disposable {
                         }
                     );
                 }
-                const resp: RpcResponse = {
+                const resp = {
                     id,
                     error: { message: `Unknown method: ${method}` },
                     service,

@@ -19,7 +19,7 @@ export const webMessageAdapter: IMessageAdapter = {
 
 export class WebRPCClient extends RPCClient {
     constructor() {
-        super(webMessageAdapter);
+        super(webMessageAdapter, 'web');
     }
 }
 

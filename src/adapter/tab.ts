@@ -41,7 +41,7 @@ export class TabRPCClient extends RPCClient {
 
     constructor(tabId: number) {
         const adapter = new TabMessageAdapter(tabId);
-        super(adapter);
+        super(adapter, 'wxt-page');
         this.adapter = adapter;
         this.disposeWithMe(() => this.adapter.dispose());
     }

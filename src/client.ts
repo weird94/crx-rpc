@@ -1,5 +1,5 @@
 import { OBSERVABLE_EVENT, RPC_EVENT_NAME, RPC_RESPONSE_EVENT_NAME, UNSUBSCRIBE_OBSERVABLE } from './const';
-import type { RpcRequest, RpcResponse, RpcObservableUpdateMessage, IMessageAdapter } from './types';
+import type { RpcRequest, RpcResponse, RpcObservableUpdateMessage, IMessageAdapter, RpcTo, RpcFrom } from './types';
 import type { Identifier } from './id';
 import { Disposable } from './disposable';
 import { randomId } from './tool';
@@ -19,7 +19,8 @@ export class RPCClient extends Disposable {
     private pending: Map<string, { resolve: Function; reject: Function }> = new Map();
 
     constructor(
-        private messageAdapter: IMessageAdapter
+        private messageAdapter: IMessageAdapter,
+        private from: RpcFrom
     ) {
         super();
         this.disposeWithMe(messageAdapter.onMessage<RpcResponse>(RPC_RESPONSE_EVENT_NAME, (event: RpcResponse) => {
@@ -40,7 +41,7 @@ export class RPCClient extends Disposable {
         }));
     }
 
-    call<T = any>(service: string, method: string, args: any[]): Promise<T> {
+    call<T = any>(service: string, method: string, to: RpcTo, args: any[]): Promise<T> {
         const id = randomId();
         return new Promise<T>((resolve, reject) => {
             this.pending.set(id, { resolve, reject });
@@ -49,12 +50,14 @@ export class RPCClient extends Disposable {
                 args,
                 id,
                 service,
+                to,
+                from: this.from
             };
             this.messageAdapter.sendMessage(RPC_EVENT_NAME, requestParam);
         });
     }
 
-    createWebRPCService<T>(serviceIdentifier: Identifier<T>): ServiceProxy<T> {
+    createRPCService<T>(serviceIdentifier: Identifier<T>): ServiceProxy<T> {
         const serviceKey = serviceIdentifier.key;
 
         // 创建代理对象，拦截方法调用
@@ -63,7 +66,7 @@ export class RPCClient extends Disposable {
                 if (typeof prop === 'string') {
                     // 返回一个代理函数
                     return (...args: any[]) => {
-                        return this.call(serviceKey, prop, args);
+                        return this.call(serviceKey, prop, serviceIdentifier.to, args);
                     };
                 }
                 return (target as any)[prop];
