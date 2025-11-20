@@ -160,71 +160,40 @@ async function calculate() {
 ### Complete Communication Topology
 
 ```mermaid
-graph TB
-    subgraph WebPage["Web Page Context"]
+graph LR
+    subgraph Web["Web Page"]
         WC[WebRPCClient]
-        WO[WebObservable]
     end
-    
-    subgraph ContentScript["Content Script Context"]
-        CR[ContentRPC<br/>Bridge Mode]
-        CC[ContentRPCClient<br/>Direct Mode]
-        CO[ContentObservable]
+
+    subgraph Content["Content Script"]
+        CR[ContentRPC Bridge]
     end
-    
-    subgraph Background["Background Script Context"]
+
+    subgraph Bg["Background"]
         BR[BackgroundRPC]
-        MS[MathService]
-        US[UserService]
-        RS[RemoteSubject]
-        RSM[RemoteSubjectManager]
+        Service[Services]
     end
-    
-    subgraph ExtPage["Extension Page Context<br/>(Popup/Options/Sidepanel)"]
+
+    subgraph Ext["Extension Page"]
         EC[ExtPageRPCClient]
-        EO[ExtPageObservable]
     end
-    
-    subgraph TabContext["Tab-specific Access"]
-        TC[TabRPCClient]
-    end
-    
-    %% RPC Calls
-    WC -->|"CustomEvent<br/>.add(1,2)"| CR
-    CR -->|"chrome.runtime<br/>Forward"| BR
-    CC -->|"chrome.runtime<br/>.multiply(2,3)"| BR
-    EC -->|"chrome.runtime<br/>.divide(10,2)"| BR
-    TC -->|"chrome.tabs<br/>Access Content Service"| CC
-    
-    BR -->|Response| CR
-    CR -->|CustomEvent| WC
-    BR -->|Response| CC
-    BR -->|Response| EC
-    
-    BR -.->|Manages| MS
-    BR -.->|Manages| US
-    
-    %% Observable Streams
-    WO -.->|Subscribe| CR
-    CR -.->|Forward| RSM
-    CO -.->|Subscribe| RSM
-    EO -.->|Subscribe| RSM
-    RSM -.->|Broadcast| RS
-    RS -.->|Updates| CR
-    CR -.->|Updates| WO
-    RS -.->|Updates| CO
-    RS -.->|Updates| EO
+
+    %% Web to Background Flow
+    WC -- "1. CustomEvent" --> CR
+    CR -- "2. chrome.runtime.sendMessage" --> BR
+    BR -- "3. Execute" --> Service
+    Service -- "4. Result" --> BR
+    BR -- "5. chrome.tabs.sendMessage" --> CR
+    CR -- "6. CustomEvent" --> WC
+
+    %% Extension to Background Flow
+    EC -- "Direct Call" --> BR
     
     style WC fill:#e1f5ff
-    style CC fill:#e1f5ff
-    style EC fill:#e1f5ff
-    style TC fill:#e1f5ff
-    style BR fill:#fff4e6
-    style MS fill:#f0f0f0
-    style US fill:#f0f0f0
-    style RS fill:#ffe6f0
-    style RSM fill:#ffe6f0
     style CR fill:#e8f5e9
+    style BR fill:#fff4e6
+    style Service fill:#f0f0f0
+    style EC fill:#e1f5ff
 ```
 
 ### Communication Paths
