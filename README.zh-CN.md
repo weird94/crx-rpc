@@ -1,24 +1,26 @@
-# Chrome 扩展 RPC 框架 (crx-rpc)
+# Chrome Extension RPC (crx-rpc)
 
-一个轻量级、类型安全的Chrome扩展RPC框架，支持网页、内容脚本和背景脚本之间的通信。基于TypeScript构建，提供最大的类型安全性和开发体验。
+[English](./README.md) | 简体中文
+
+一个轻量级、类型安全的 Chrome 扩展 RPC 框架，支持网页、内容脚本（Content Script）和后台脚本（Background Script）之间的通信。基于 TypeScript 构建，提供极致的类型安全和开发体验。
 
 ## 特性
 
-- 🔒 **类型安全**: 完整的TypeScript类型支持，自动代理类型生成
-- 🚀 **易于使用**: 基于接口自动生成客户端代理
-- 🔄 **双向通信**: 支持网页 ↔ 内容脚本 ↔ 背景脚本通信
-- 📦 **零配置**: 无需手动方法绑定
-- 🎯 **Observable支持**: 内置响应式数据流支持，使用RemoteSubject
-- 🛡️ **错误处理**: 跨边界保留堆栈跟踪和错误类型
-- 🧹 **资源管理**: 内置disposable模式，支持清理资源
+- 🔒 **类型安全**：完全的 TypeScript 类型支持，自动生成代理类型
+- 🚀 **易于使用**：基于接口自动生成客户端代理
+- 🔄 **双向通信**：支持 网页 ↔ 内容脚本 ↔ 后台脚本 之间的双向通信
+- 📦 **零配置**：无需手动绑定方法
+- 🎯 **Observable 支持**：内置 RemoteSubject 支持响应式数据流
+- 🛡️ **错误处理**：跨边界保留堆栈跟踪和错误类型
+- 🧹 **资源管理**：内置 Disposable 模式，便于资源清理
 
 ## 安装
 
 ```bash
 npm install crx-rpc
-# 或
+# or
 pnpm add crx-rpc
-# 或
+# or
 yarn add crx-rpc
 ```
 
@@ -41,11 +43,11 @@ interface IMathService {
 export const IMathService = createIdentifier<IMathService>('MathService');
 ```
 
-### 2. 实现服务（背景脚本）
+### 2. 实现服务 (Background Script)
 
 ```typescript
 // background.ts
-import { BackgroundRPC } from 'crx-rpc';
+import { BackgroundRPCHost } from 'crx-rpc';
 import { IMathService } from './services/math';
 
 class MathService implements IMathService {
@@ -67,68 +69,68 @@ class MathService implements IMathService {
     }
 }
 
-// 注册服务，可选择启用日志
-const rpc = new BackgroundRPC(true); // 启用日志
-// const rpc = new BackgroundRPC(); // 禁用日志（默认）
+// 注册服务（可选开启日志）
+const rpc = new BackgroundRPCHost(true); // 开启日志
+// const rpc = new BackgroundRPCHost(); // 关闭日志（默认）
 rpc.register(IMathService, new MathService());
 ```
 
-### 3. 初始化内容脚本
+### 3. 初始化 Content Script
 
-内容脚本可以以两种模式工作：
+Content scripts 有两种工作模式：
 
-#### 选项A：作为桥接器（用于网页通信）
+#### 选项 A: 作为桥接器 (用于网页通信)
 
 ```typescript
 // content.ts
-import { ContentRPC } from 'crx-rpc';
+import { Web2BackgroundProxy } from 'crx-rpc';
 
-// 为网页 ↔ 背景脚本通信初始化RPC桥接器
-const contentRpc = new ContentRPC();
+// 初始化 RPC 桥接器，用于 网页 ↔ 后台 通信
+const contentRpc = new Web2BackgroundProxy();
 
-// 需要清理时记得dispose
+// 需要清理时调用 dispose
 // contentRpc.dispose();
 ```
 
-#### 选项B：作为直接客户端
+#### 选项 B: 作为直接客户端
 
 ```typescript
 // content.ts
-import { ContentRPCClient } from 'crx-rpc';
+import { RuntimeRPCClient } from 'crx-rpc';
 import { IMathService } from './services/math';
 
-// 将内容脚本用作直接RPC客户端
-const client = new ContentRPCClient();
+// 将 content script 作为直接的 RPC 客户端使用
+const client = new RuntimeRPCClient();
 const mathService = client.createWebRPCService(IMathService);
 
-// 直接调用背景服务
+// 直接调用后台服务
 const result = await mathService.add(5, 3);
-console.log('内容脚本结果:', result);
+console.log('Result from content script:', result);
 
-// 需要清理时记得dispose
+// 需要清理时调用 dispose
 // client.dispose();
 ```
 
-#### 选项C：既是桥接器又是客户端
+#### 选项 C: 既作为桥接器又作为客户端
 
 ```typescript
 // content.ts
-import { ContentRPC, ContentRPCClient } from 'crx-rpc';
+import { Web2BackgroundProxy, RuntimeRPCClient } from 'crx-rpc';
 import { IMathService } from './services/math';
 
-// 为网页初始化桥接器
-const bridge = new ContentRPC();
+// 初始化网页桥接器
+const bridge = new Web2BackgroundProxy();
 
-// 同时用作直接客户端
-const client = new ContentRPCClient();
+// 同时作为直接客户端使用
+const client = new RuntimeRPCClient();
 const mathService = client.createWebRPCService(IMathService);
 
-// 内容脚本可以进行自己的RPC调用
+// Content script 可以发起自己的 RPC 调用
 const result = await mathService.multiply(2, 3);
-console.log('内容脚本计算:', result);
+console.log('Content script calculation:', result);
 ```
 
-### 4. 使用客户端（网页）
+### 4. 使用客户端 (Web Page)
 
 ```typescript
 // web-page.ts
@@ -136,207 +138,130 @@ import { WebRPCClient } from 'crx-rpc';
 import { IMathService } from './services/math';
 
 async function calculate() {
-    // 创建RPC客户端
+    // 创建 RPC 客户端
     const client = new WebRPCClient();
 
     // 创建类型安全的服务代理
     const mathService = client.createWebRPCService(IMathService);
 
     // 类型安全的方法调用
-    const sum = await mathService.add(1, 2); // TypeScript知道这返回Promise<number>
+    const sum = await mathService.add(1, 2); // TypeScript 知道这返回 Promise<number>
     const difference = await mathService.subtract(10, 5);
     const product = await mathService.multiply(3, 4);
     const quotient = await mathService.divide(15, 3);
 
-    console.log('结果:', { sum, difference, product, quotient });
+    console.log('Results:', { sum, difference, product, quotient });
 
-    // 需要清理时记得dispose
+    // 需要清理时调用 dispose
     // client.dispose();
-}
-```
-
-### 5. 使用客户端(扩展页面)
-
-```typescript
-// popup.ts / options.ts / sidepanel.ts
-import { ExtPageRPCClient } from 'crx-rpc';
-import { IMathService } from './services/math';
-
-async function calculate() {
-    // 创建扩展页面RPC客户端
-    const client = new ExtPageRPCClient();
-
-    // 创建类型安全的服务代理
-    const mathService = client.createWebRPCService(IMathService);
-
-    // 直接调用background服务
-    const sum = await mathService.add(1, 2);
-    const difference = await mathService.subtract(10, 5);
-    const product = await mathService.multiply(3, 4);
-    const quotient = await mathService.divide(15, 3);
-
-    console.log('结果:', { sum, difference, product, quotient });
-
-    // 页面关闭时自动清理
-    window.addEventListener('unload', () => {
-        client.dispose();
-    });
 }
 ```
 
 ## 架构
 
-### 完整通信拓扑图
+### 完整通信拓扑
 
 ```mermaid
-graph TB
-    subgraph WebPage["网页上下文"]
+graph LR
+    subgraph Web["Web Page"]
         WC[WebRPCClient]
-        WO[WebObservable]
     end
-    
-    subgraph ContentScript["内容脚本上下文"]
-        CR[ContentRPC<br/>桥接模式]
-        CC[ContentRPCClient<br/>直接模式]
-        CO[ContentObservable]
+
+    subgraph Content["Content Script"]
+        CR[Web2BackgroundProxy Bridge]
     end
-    
-    subgraph Background["背景脚本上下文"]
-        BR[BackgroundRPC]
-        MS[MathService]
-        US[UserService]
-        RS[RemoteSubject]
-        RSM[RemoteSubjectManager]
+
+    subgraph Bg["Background"]
+        BR[BackgroundRPCHost]
+        Service[Services]
     end
-    
-    subgraph ExtPage["扩展页面上下文<br/>(Popup/Options/Sidepanel)"]
-        EC[ExtPageRPCClient]
-        EO[ExtPageObservable]
+
+    subgraph Ext["Extension Page"]
+        EC[RuntimeRPCClient]
     end
-    
-    subgraph TabContext["标签页特定访问"]
-        TC[TabRPCClient]
-    end
-    
-    %% RPC 调用
-    WC -->|"CustomEvent<br/>.add(1,2)"| CR
-    CR -->|"chrome.runtime<br/>转发"| BR
-    CC -->|"chrome.runtime<br/>.multiply(2,3)"| BR
-    EC -->|"chrome.runtime<br/>.divide(10,2)"| BR
-    TC -->|"chrome.tabs<br/>访问内容服务"| CC
-    
-    BR -->|响应| CR
-    CR -->|CustomEvent| WC
-    BR -->|响应| CC
-    BR -->|响应| EC
-    
-    BR -.->|管理| MS
-    BR -.->|管理| US
-    
-    %% Observable 数据流
-    WO -.->|订阅| CR
-    CR -.->|转发| RSM
-    CO -.->|订阅| RSM
-    EO -.->|订阅| RSM
-    RSM -.->|广播| RS
-    RS -.->|更新| CR
-    CR -.->|更新| WO
-    RS -.->|更新| CO
-    RS -.->|更新| EO
+
+    %% Web to Background Flow
+    WC -- "1. CustomEvent" --> CR
+    CR -- "2. chrome.runtime.sendMessage" --> BR
+    BR -- "3. Execute" --> Service
+    Service -- "4. Result" --> BR
+    BR -- "5. chrome.tabs.sendMessage" --> CR
+    CR -- "6. CustomEvent" --> WC
+
+    %% Extension to Background Flow
+    EC -- "Direct Call" --> BR
     
     style WC fill:#e1f5ff
-    style CC fill:#e1f5ff
-    style EC fill:#e1f5ff
-    style TC fill:#e1f5ff
-    style BR fill:#fff4e6
-    style MS fill:#f0f0f0
-    style US fill:#f0f0f0
-    style RS fill:#ffe6f0
-    style RSM fill:#ffe6f0
     style CR fill:#e8f5e9
+    style BR fill:#fff4e6
+    style Service fill:#f0f0f0
+    style EC fill:#e1f5ff
 ```
 
 ### 通信路径
 
-| 路径 | 方式 | 描述 |
-|------|------|------|
-| **网页 → 背景脚本** | CustomEvent + chrome.runtime | 通过 ContentRPC 桥接 |
-| **内容脚本 → 背景脚本** | chrome.runtime | 直接通信 |
-| **扩展页面 → 背景脚本** | chrome.runtime | 直接通信 |
-| **扩展页面 → 内容脚本** | chrome.tabs + TabRPCClient | 标签页特定访问 |
-| **背景脚本 → 所有上下文** | RemoteSubject 广播 | 实时数据流 |
-
-### 核心组件
-                    │                 │
-                    │ 代理服务        │
-                    │ .subtract(5,2)  │
-                    └─────────────────┘
-```
-
-### 通信流程
-
-1. **网页 → 内容脚本**: 使用 `window.dispatchEvent` 和 `CustomEvent`
-2. **内容脚本 → 背景脚本**: 使用 `chrome.runtime.sendMessage`
-3. **背景脚本 → 内容脚本**: 使用 `chrome.tabs.sendMessage`
-4. **内容脚本 → 网页**: 使用 `window.dispatchEvent` 和 `CustomEvent`
-5. **内容脚本直接**: 直接使用 `chrome.runtime.sendMessage` (ContentRPCClient)
-6. **扩展页面 ↔ 背景脚本**: 直接使用 `chrome.runtime.sendMessage/onMessage` (ExtPageRPCClient)
+| 路径 | 方法 | 描述 |
+|------|--------|-------------|
+| **Web Page → Background** | CustomEvent + chrome.runtime | 通过 Web2BackgroundProxy 桥接 |
+| **Content Script → Background** | chrome.runtime | 直接通信 |
+| **Extension Page → Background** | chrome.runtime | 直接通信 |
+| **Extension Page → Content Script** | chrome.tabs + TabRPCClient | 指定 Tab 访问 |
+| **Background → All Contexts** | RemoteSubject broadcast | 实时数据流 |
 
 ### 核心组件
 
-- **WebRPCClient**: 用于网页的客户端,使用window事件
-- **ContentRPC**: 在网页和背景脚本间转发消息的桥接器
-- **ContentRPCClient**: 内容脚本的直接RPC客户端(绕过桥接器)
-- **ExtPageRPCClient**: 用于扩展页面(popup/options/sidepanel)的直接RPC客户端
-- **BackgroundRPC**: 背景脚本中的服务注册表和处理器
-- **RPCClient**: 具有服务代理生成功能的基础客户端
+- **WebRPCClient**: 用于网页的客户端，使用 window 事件
+- **Web2BackgroundProxy**: 在网页和后台之间转发消息的桥接器
+- **RuntimeRPCClient**: 用于 Content Script 的直接 RPC 客户端（绕过桥接）
+- **BackgroundRPCHost**: 后台脚本中的服务注册表和处理器
+- **RPCClient**: 带有服务代理生成的基类客户端
 
 ## 日志支持
 
-框架包含内置的日志支持，用于调试和监控RPC调用。
+框架内置了日志支持，用于调试和监控 RPC 调用。
 
-### 启用日志
+### 开启日志
 
 ```typescript
-// 在BackgroundRPC中启用日志
-const rpc = new BackgroundRPC(true); // 启用日志
-// const rpc = new BackgroundRPC(); // 禁用日志（默认）
+// 在 BackgroundRPCHost 中开启日志
+const rpc = new BackgroundRPCHost(true); // 开启日志
+// const rpc = new BackgroundRPCHost(); // 关闭日志（默认）
 
-// 示例输出：
+// 示例输出:
 // [RPC] Call: MathService.add { id: "123", args: [5, 3], senderId: 456, timestamp: "2025-09-01T10:00:00.000Z" }
 // [RPC] Success: MathService.add { id: "123", result: 8, timestamp: "2025-09-01T10:00:00.001Z" }
 
-// 对于错误：
+// 错误情况:
 // [RPC] Error: MathService.divide { id: "124", error: "Division by zero", timestamp: "2025-09-01T10:00:01.000Z" }
 ```
 
 ### 日志输出
 
-启用日志时，会记录以下信息：
+开启日志后，将记录以下信息：
 
-- **函数调用**: 服务名、方法名、参数、发送者ID和时间戳
-- **成功响应**: 服务名、方法名、结果和时间戳  
-- **错误响应**: 服务名、方法名、错误消息和时间戳
+- **函数调用**: 服务名、方法名、参数、发送者 ID 和时间戳
+- **成功响应**: 服务名、方法名、结果和时间戳
+- **错误响应**: 服务名、方法名、错误信息和时间戳
 - **未知服务/方法**: 无效服务或方法调用的警告
 
 ### 使用场景
 
-- **开发**: 在开发期间调试RPC通信
-- **生产监控**: 跟踪RPC使用模式和性能
-- **故障排除**: 识别失败的调用和错误模式
-- **安全审计**: 监控RPC访问模式
+- **开发**: 在开发过程中调试 RPC 通信
+- **生产监控**: 追踪 RPC 使用模式和性能
+- **故障排查**: 识别失败的调用和错误模式
+- **安全审计**: 监控 RPC 访问模式
 
-## Observable支持
+## Observable 支持
 
-框架包含使用 `RemoteSubject` 和 `Observable` 模式的内置响应式数据流支持，采用集中式消息管理系统。
+框架内置了对响应式数据流的支持，使用 `RemoteSubject` 和 `Observable` 模式以及中心化的消息管理系统。
 
-### RemoteSubjectManager 和 RemoteSubject（背景脚本）
+### Remote Subject Manager & Remote Subject (Background Script)
 
-`RemoteSubjectManager` 作为集中式消息中心处理所有订阅管理和消息路由，而 `RemoteSubject` 专注于纯状态管理。
+`RemoteSubjectManager` 作为一个中心化的消息枢纽，处理所有的订阅管理和消息路由，而 `RemoteSubject` 专注于状态管理。
 
 ```typescript
 // background.ts
-import { BackgroundRPC, RemoteSubjectManager, createIdentifier } from 'crx-rpc';
+import { BackgroundRPCHost, RemoteSubjectManager, createIdentifier } from 'crx-rpc';
 
 interface ICounterObservable {
     value: number;
@@ -344,12 +269,12 @@ interface ICounterObservable {
 
 const ICounterObservable = createIdentifier<ICounterObservable>('Counter');
 
-const rpc = new BackgroundRPC();
+const rpc = new BackgroundRPCHost();
 
-// 创建集中式subject管理器
+// 创建中心化 subject 管理器
 const subjectManager = new RemoteSubjectManager();
 
-// 通过管理器创建远程subject
+// 通过管理器创建 remote subject
 const counterSubject = subjectManager.createSubject(
     ICounterObservable, 
     'main', 
@@ -362,41 +287,41 @@ setInterval(() => {
     counterSubject.next(newValue);
 }, 1000);
 
-// 管理器处理：
+// 管理器处理:
 // - 消息路由和订阅管理
-// - 在subject创建前到达的订阅排队
-// - tab关闭时自动清理
+// - 队列处理（在 subject 创建之前的订阅）
+// - Tab 关闭时的自动清理
 // - 向多个订阅者广播
 
 // 清理
-// subjectManager.dispose(); // 这将处理所有subject
+// subjectManager.dispose(); // 这将销毁所有 subject
 ```
 
-### RemoteSubjectManager 的核心特性
+### RemoteSubjectManager 的关键特性
 
-- **集中式消息中心**: 所有observable相关的消息都由管理器处理
-- **队列管理**: 在subject创建前收到的订阅会被排队并稍后处理
-- **资源管理**: tab关闭时自动清理订阅
-- **类型安全**: 完整的TypeScript支持和恰当的类型检查
+- **中心化消息枢纽**: 所有 observable 相关的消息都由管理器处理
+- **队列管理**: 在 subject 创建之前收到的订阅会被排队并在稍后处理
+- **资源管理**: Tab 关闭时自动清理订阅
+- **类型安全**: 全程完整的 TypeScript 支持
 
 ### 架构
 
 ```mermaid
 flowchart LR
-    subgraph WebPage["网页"]
+    subgraph WebPage["Web Page"]
         WO[WebObservable<br/>.subscribe]
     end
     
-    subgraph Background["背景脚本"]
-        RSM[RemoteSubjectManager<br/>消息路由和队列管理]
+    subgraph Background["Background Script"]
+        RSM[RemoteSubjectManager<br/>消息路由 & 队列管理]
         RS[RemoteSubject<br/>纯状态管理<br/>.next / .complete]
     end
     
-    subgraph Content["内容脚本"]
+    subgraph Content["Content Script"]
         CO[ContentObservable<br/>.subscribe]
     end
     
-    subgraph ExtPage["扩展页面"]
+    subgraph ExtPage["Extension Page"]
         EO[ExtPageObservable<br/>.subscribe]
     end
     
@@ -425,20 +350,20 @@ interface ICounterObservable {
 
 const ICounterObservable = createIdentifier<ICounterObservable>('Counter');
 
-// 订阅远程observable
+// 订阅远程 observable
 const observable = new WebObservable(
     ICounterObservable,
     'main',
     (value) => {
-        console.log('计数器更新:', value.value);
+        console.log('Counter updated:', value.value);
     }
 );
 
-// 完成时清理
+// 完成后清理
 // observable.dispose();
 ```
 
-### 从内容脚本订阅
+### 从 Content Script 订阅
 
 ```typescript
 // content.ts
@@ -450,25 +375,25 @@ interface ICounterObservable {
 
 const ICounterObservable = createIdentifier<ICounterObservable>('Counter');
 
-// 内容脚本可以直接订阅observables
+// Content script 可以直接订阅 observables
 const observable = new ContentObservable(
     ICounterObservable,
     'main',
     (value) => {
-        console.log('来自内容脚本的计数器:', value.value);
-        // 内容脚本可以响应实时更新
+        console.log('Counter from content script:', value.value);
+        // Content script 可以对实时更新做出反应
         updateUI(value.value);
     }
 );
 
-// 完成时清理
+// 完成后清理
 // observable.dispose();
 ```
 
-### 从扩展页面订阅
+### 从 Extension Page 订阅
 
 ```typescript
-// popup.ts / options.ts / sidepanel.ts
+// popup.ts / options.ts
 import { ExtPageObservable, createIdentifier } from 'crx-rpc';
 
 interface ICounterObservable {
@@ -477,220 +402,115 @@ interface ICounterObservable {
 
 const ICounterObservable = createIdentifier<ICounterObservable>('Counter');
 
-// 扩展页面可以订阅background的observables
+// Extension page 可以订阅后台 observables
 const observable = new ExtPageObservable(
     ICounterObservable,
     'main',
     (value) => {
-        console.log('Popup计数器更新:', value.value);
-        // 更新popup UI
+        console.log('Counter from extension page:', value.value);
         document.getElementById('counter').textContent = value.value.toString();
     }
 );
 
-// 页面关闭时自动清理
+// 完成后清理
 window.addEventListener('unload', () => {
     observable.dispose();
 });
 ```
 
-### Observable通信模式
+### Observable 通信模式
 
-Observable系统支持多种具有集中式管理的通信模式：
+Observable 系统支持多种通信模式，并进行统一管理：
 
 ```typescript
-// 模式1: 背景脚本 → 网页 (通过内容脚本桥接器)
-// 背景脚本: RemoteSubjectManager创建和管理RemoteSubject
-// 背景脚本: RemoteSubject.next() → Manager路由到订阅者
-// 网页: WebObservable.subscribe()
+// 模式 1: Background → Web Page (通过 Content Script 桥接)
+// Background: RemoteSubjectManager 创建并管理 RemoteSubject
+// Background: RemoteSubject.next() → Manager 路由给订阅者
+// Web Page: WebObservable.subscribe()
 
-// 模式2: 背景脚本 → 内容脚本 (直接)
-// 背景脚本: RemoteSubject.next() → Manager直接路由
-// 内容脚本: ContentObservable.subscribe()
+// 模式 2: Background → Content Script (直接)
+// Background: RemoteSubject.next() → Manager 直接路由
+// Content Script: ContentObservable.subscribe()
 
-// 模式3: 背景脚本 → 网页和内容脚本同时
-// 背景脚本: RemoteSubject.next() → Manager广播给所有订阅者
-// 网页: WebObservable.subscribe()
-// 内容脚本: ContentObservable.subscribe()
+// 模式 3: Background → Both Web Page and Content Script
+// Background: RemoteSubject.next() → Manager 广播给所有订阅者
+// Web Page: WebObservable.subscribe()
+// Content Script: ContentObservable.subscribe()
 
-// 模式4: Subject创建前的订阅 (队列管理)
-// 订阅者: WebObservable.subscribe() → Manager将订阅排队
-// 背景脚本: 稍后创建RemoteSubject → Manager处理排队的订阅
-// 结果: 不会错过初始值，保证订阅顺序
+// 模式 4: Subject 创建前的订阅 (队列管理)
+// Subscriber: WebObservable.subscribe() → Manager 将订阅排队
+// Background: 稍后创建 RemoteSubject → Manager 处理排队的订阅
+// 结果: 不会错过初始值，正确的订阅顺序
 ```
 
 ## 高级用法
 
-### 使用Disposables进行资源管理
+### 使用 Disposables 进行资源管理
 
-所有RPC组件都继承了 `Disposable` 类来进行适当的清理：
+所有 RPC 组件都继承自 `Disposable` 类以便于正确清理：
 
 ```typescript
-import { WebRPCClient, ContentRPC, BackgroundRPC } from 'crx-rpc';
+import { WebRPCClient, Web2BackgroundProxy, BackgroundRPCHost } from 'crx-rpc';
 
 const client = new WebRPCClient();
-const contentRpc = new ContentRPC();
-const backgroundRpc = new BackgroundRPC();
+const contentRpc = new Web2BackgroundProxy();
+const backgroundRpc = new BackgroundRPCHost();
 
-// 适当的清理
+// 正确清理
 function cleanup() {
     client.dispose();
     contentRpc.dispose();
     backgroundRpc.dispose();
 }
 
-// 检查是否已经disposed
+// 检查是否已销毁
 if (!client.isDisposed()) {
     const service = client.createWebRPCService(IMathService);
     // 使用服务...
 }
 ```
 
-### 内容脚本作为直接客户端
+### Extension Page 访问 Content Script 服务
 
-内容脚本具有完整的RPC功能，可以作为直接客户端而无需通过网页桥接：
-
-```typescript
-// content.ts
-import { ContentRPCClient, ContentObservable } from 'crx-rpc';
-import { IMathService, IUserService } from './services';
-
-const client = new ContentRPCClient();
-
-// 创建服务代理
-const mathService = client.createWebRPCService(IMathService);
-const userService = client.createWebRPCService(IUserService);
-
-// 直接调用背景服务
-const result = await mathService.add(5, 3);
-const user = await userService.getUser('123');
-
-// 内容脚本也可以订阅observables
-const counterObservable = new ContentObservable(
-    ICounterObservable,
-    'main',
-    (value) => {
-        // 基于实时数据更新内容脚本UI
-        updateContentScriptUI(value);
-    }
-);
-
-// 在DOM操作中使用
-document.addEventListener('DOMContentLoaded', async () => {
-    const calculation = await mathService.multiply(2, 3);
-    document.body.appendChild(
-        createElement('div', `计算结果: ${calculation}`)
-    );
-});
-```
-
-### 内容脚本使用场景
-
-内容脚本可以在各种场景中使用RPC：
-
-1. **直接通信**: 在不涉及网页的情况下进行RPC调用
-2. **数据处理**: 在注入页面之前处理来自背景服务的数据
-3. **实时更新**: 订阅observables获取实时数据更新
-4. **桥接+客户端**: 既作为网页的桥接器又作为直接客户端
-5. **DOM操作**: 使用RPC数据修改页面内容
-
-### 扩展页面作为直接客户端
-
-扩展页面(popup、options、sidepanel等)可以直接与background通信,无需content script:
-
-```typescript
-// popup.ts
-import { ExtPageRPCClient, ExtPageObservable } from 'crx-rpc';
-import { IMathService, IUserService, ICounterObservable } from './services';
-
-const client = new ExtPageRPCClient();
-
-// 创建服务代理
-const mathService = client.createWebRPCService(IMathService);
-const userService = client.createWebRPCService(IUserService);
-
-// 直接调用背景服务
-const result = await mathService.add(5, 3);
-const user = await userService.getUser('123');
-
-// 扩展页面也可以订阅observables
-const counterObservable = new ExtPageObservable(
-    ICounterObservable,
-    'main',
-    (value) => {
-        // 实时更新popup UI
-        document.getElementById('counter').textContent = value.toString();
-    }
-);
-
-// 在popup中使用
-document.addEventListener('DOMContentLoaded', async () => {
-    const calculation = await mathService.multiply(2, 3);
-    document.getElementById('result').textContent = `结果: ${calculation}`;
-    
-    // 更新用户信息
-    const currentUser = await userService.getUser('me');
-    document.getElementById('username').textContent = currentUser.name;
-});
-
-// 页面关闭时清理
-window.addEventListener('unload', () => {
-    client.dispose();
-    counterObservable.dispose();
-});
-```
-
-### 扩展页面使用场景
-
-扩展页面在各种场景中使用RPC:
-
-1. **直接通信**: 与background service直接通信,无需content script
-2. **UI交互**: 根据background数据更新popup/options界面
-3. **实时更新**: 订阅observables获取实时数据推送
-4. **用户设置**: 在options页面中读取/保存配置
-5. **状态同步**: 与background保持状态同步
-
-### 扩展页面访问内容脚本服务
-
-扩展页面可以使用 `TabRPCClient` 通过指定 tab ID 来访问内容脚本的服务:
+Extension pages 可以通过指定目标 tab ID 使用 `TabRPCClient` 访问 content script 服务：
 
 ```typescript
 // popup.ts
 import { TabRPCClient } from 'crx-rpc';
 import { IContentService } from './services';
 
-// 获取当前活动标签页
+// 获取当前活跃 tab
 const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
 if (tab.id) {
     // 为特定 tab 创建 RPC 客户端
     const tabClient = new TabRPCClient(tab.id);
     
-    // 访问该 tab 中的内容脚本服务
+    // 访问该 tab 中的 content script 服务
     const contentService = tabClient.createWebRPCService(IContentService);
     
-    // 调用内容脚本方法
+    // 调用 content script 方法
     const result = await contentService.getDOMInfo();
-    console.log('来自内容脚本的 DOM 信息:', result);
+    console.log('DOM info from content script:', result);
     
-    // 完成时清理
+    // 完成后清理
     window.addEventListener('unload', () => {
         tabClient.dispose();
     });
 }
 ```
 
-#### 扩展页面 → 内容脚本通信的使用场景:
+#### Extension Page → Content Script 通信场景:
 
-1. **DOM 检查**: Popup 查询内容脚本获取页面信息
-2. **用户操作**: Options 页面触发特定标签页的内容脚本操作
-3. **多标签管理**: Sidepanel 协调多个标签页的操作
-4. **实时预览**: 扩展页面从内容脚本获取实时更新
+1. **DOM 检查**: Popup 查询 Content Script 获取页面信息
+2. **用户操作**: Options 页面在特定 Tab 上触发 Content Script 操作
+3. **多 Tab 管理**: Sidepanel 协调多个 Tab 之间的操作
+4. **实时预览**: Extension Page 从 Content Script 获取实时更新
 
-#### 完整示例: Popup 与标签页特定服务交互
+#### 完整示例: 带有 Tab 专属服务的 Popup
 
 ```typescript
-// content.ts - 在内容脚本中注册服务
+// content.ts - 在 content script 中注册服务
 import { ContentRPCHost } from 'crx-rpc';
 import { IPageService } from './services';
 
@@ -711,25 +531,25 @@ class PageService implements IPageService {
 const contentHost = new ContentRPCHost();
 contentHost.register(IPageService, new PageService());
 
-// popup.ts - 从 popup 访问内容脚本
-import { TabRPCClient, ExtPageRPCClient } from 'crx-rpc';
+// popup.ts - 从 popup 访问 content script
+import { TabRPCClient, RuntimeRPCClient } from 'crx-rpc';
 import { IPageService, IMathService } from './services';
 
-// 访问背景服务
-const bgClient = new ExtPageRPCClient();
+// 访问后台服务
+const bgClient = new RuntimeRPCClient();
 const mathService = bgClient.createWebRPCService(IMathService);
 
-// 访问活动标签页中的内容脚本服务
+// 访问活跃 tab 中的 content script 服务
 const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 if (tab.id) {
     const tabClient = new TabRPCClient(tab.id);
     const pageService = tabClient.createWebRPCService(IPageService);
     
-    // 从内容脚本获取页面信息
+    // 从 content script 获取页面信息
     const title = await pageService.getTitle();
     const selection = await pageService.getSelection();
     
-    // 使用背景服务处理
+    // 使用后台服务处理
     const result = await mathService.calculate(selection.length);
     
     // 更新 popup UI
@@ -738,99 +558,40 @@ if (tab.id) {
 }
 ```
 
-### 复杂数据类型
-
-```typescript
-interface IUserService {
-    getUser(id: string): Promise<User>;
-    createUser(userData: CreateUserRequest): Promise<User>;
-    updateUser(id: string, updates: Partial<User>): Promise<User>;
-}
-
-interface User {
-    id: string;
-    name: string;
-    email: string;
-    createdAt: Date;
-}
-
-interface CreateUserRequest {
-    name: string;
-    email: string;
-}
-
-export const IUserService = createIdentifier<IUserService>('UserService');
-
-// 使用示例
-const client = new WebRPCClient();
-const userService = client.createWebRPCService(IUserService);
-
-const newUser = await userService.createUser({
-    name: 'John Doe',
-    email: 'john@example.com',
-});
-```
-
-### 多服务管理
-
-```typescript
-// 创建RPC客户端
-const client = new WebRPCClient();
-
-// 创建多个服务代理
-const mathService = client.createWebRPCService(IMathService);
-const userService = client.createWebRPCService(IUserService);
-const fileService = client.createWebRPCService(IFileService);
-
-// 并行调用不同的服务
-const [sum, user, file] = await Promise.all([
-    mathService.add(1, 2),
-    userService.getUser('123'),
-    fileService.readFile('config.json'),
-]);
-```
-
 ## 使用场景
 
-### 场景1: 仅网页
-- 网页需要与背景服务通信
-- 使用: `WebRPCClient` + `ContentRPC` 桥接器
+### 场景 1: 仅网页
+- 网页需要与后台服务通信
+- 使用: `WebRPCClient` + `Web2BackgroundProxy` 桥接
 
-### 场景2: 仅内容脚本  
-- 内容脚本需要直接访问背景服务
-- 使用: 直接使用 `ContentRPCClient`(无需桥接器)
+### 场景 2: 仅 Content Script
+- Content scripts 需要直接访问后台服务
+- 使用: `RuntimeRPCClient` 直接访问（无需桥接）
 
-### 场景3: 网页和内容脚本同时
-- 两个上下文都需要RPC访问
-- 使用: `ContentRPC` 桥接器 + `ContentRPCClient` 进行直接访问
+### 场景 3: 网页和 Content Script
+- 两种上下文都需要 RPC 访问
+- 使用: `Web2BackgroundProxy` 桥接 + `RuntimeRPCClient` 直接访问
 
-### 场景4: 扩展页面(Popup/Options/Sidepanel)
-- 扩展内置页面需要访问背景服务
-- 使用: 直接使用 `ExtPageRPCClient`
-- 特点: 不需要content script,直接与background通信
+### 场景 4: 实时数据流
+- 后台需要向多个上下文推送更新
+- 使用: `RemoteSubject` + `WebObservable`/`ContentObservable`
 
-### 场景5: 实时数据流
-- 背景脚本需要向多个上下文推送更新
-- 使用: `RemoteSubject` + `WebObservable`/`ContentObservable`/`ExtPageObservable`
-
-## API参考
+## API 参考
 
 ### 核心类
 
-- **`BackgroundRPC`**: 背景脚本的服务注册表和消息处理器
-- **`ContentRPC`**: 网页和背景脚本间的消息桥接器
-- **`WebRPCClient`**: 网页的RPC客户端
-- **`ContentRPCClient`**: 内容脚本的直接RPC客户端
-- **`ExtPageRPCClient`**: 扩展页面(popup/options/sidepanel)的直接RPC客户端
-- **`RemoteSubjectManager`**: 集中式observable消息管理系统
+- **`BackgroundRPCHost`**: 后台脚本的服务注册表和消息处理器
+- **`Web2BackgroundProxy`**: 网页和后台脚本之间的消息桥接器
+- **`WebRPCClient`**: 网页的 RPC 客户端
+- **`RuntimeRPCClient`**: Content scripts 的直接 RPC 客户端
+- **`RemoteSubjectManager`**: 中心化的 observable 消息管理系统
 
-### Observable类
+### Observable 类
 
-- **`RemoteSubjectManager`**: 管理订阅和消息路由的集中式消息中心
-- **`RemoteSubject<T>`**: 与管理器配合进行纯状态管理的Observable subject
-- **`WebObservable<T>`**: 网页的Observable订阅者
-- **`ContentObservable<T>`**: 内容脚本的Observable订阅者
-- **`ExtPageObservable<T>`**: 扩展页面的Observable订阅者
+- **`RemoteSubjectManager`**: 管理所有 observable 的订阅和消息路由的中心化消息枢纽
+- **`RemoteSubject<T>`**: 纯状态管理 observable，与管理器配合广播更新
+- **`WebObservable<T>`**: 网页的 observable 订阅者
+- **`ContentObservable<T>`**: Content scripts 的 observable 订阅者
 
 ### 工具函数
 
@@ -839,41 +600,11 @@ const [sum, user, file] = await Promise.all([
 ### 接口
 
 - **`Identifier<T>`**: 类型安全的服务标识符接口
-- **`RpcRequest`**: RPC请求消息结构
-- **`RpcResponse`**: RPC响应消息结构
+- **`RpcRequest`**: RPC 请求消息结构
+- **`RpcResponse`**: RPC 响应消息结构
 - **`IMessageAdapter`**: 消息传输抽象接口
 - **`IDisposable`**: 资源管理接口
 
-## 最佳实践
-
-1. **服务接口设计**
-   - 使用清晰的方法名和适当的TypeScript类型
-   - 为异步操作支持返回Promise类型
-   - 定义详细的参数和返回值类型
-   - 保持接口专注和内聚
-
-2. **资源管理**
-   - 需要清理时始终在RPC实例上调用 `dispose()`
-   - 使用已销毁的实例之前检查 `isDisposed()`
-   - 在组件卸载/销毁生命周期中进行适当的清理
-
-3. **错误处理**
-   - 在服务方法中实现适当的错误处理
-   - 抛出有意义且描述性的错误
-   - 在客户端适当处理RPC错误
-
-4. **性能优化**
-   - 避免频繁的小数据传输
-   - 可能时考虑批处理操作
-   - 对实时数据更新使用Observable模式，通过 `RemoteSubjectManager` 进行高效消息路由
-   - 在适当的地方实现缓存策略
-   - 管理器自动处理订阅排队以防止竞态条件
-
-5. **安全考虑**
-   - 在服务实现中验证输入参数
-   - 不要通过RPC暴露敏感操作
-   - 对资源密集型操作考虑速率限制
-
-## 许可证
+## License
 
 MIT

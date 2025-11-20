@@ -1,5 +1,7 @@
 # Chrome Extension RPC (crx-rpc)
 
+English | [简体中文](./README.zh-CN.md)
+
 A lightweight, type-safe RPC framework for Chrome Extensions supporting communication between web pages, content scripts, and background scripts. Built with TypeScript for maximum type safety and developer experience.
 
 ## Features
@@ -45,7 +47,7 @@ export const IMathService = createIdentifier<IMathService>('MathService');
 
 ```typescript
 // background.ts
-import { BackgroundRPC } from 'crx-rpc';
+import { BackgroundRPCHost } from 'crx-rpc';
 import { IMathService } from './services/math';
 
 class MathService implements IMathService {
@@ -68,8 +70,8 @@ class MathService implements IMathService {
 }
 
 // Register service with optional logging
-const rpc = new BackgroundRPC(true); // Enable logging
-// const rpc = new BackgroundRPC(); // Disable logging (default)
+const rpc = new BackgroundRPCHost(true); // Enable logging
+// const rpc = new BackgroundRPCHost(); // Disable logging (default)
 rpc.register(IMathService, new MathService());
 ```
 
@@ -81,10 +83,10 @@ Content scripts can work in two modes:
 
 ```typescript
 // content.ts
-import { ContentRPC } from 'crx-rpc';
+import { Web2BackgroundProxy } from 'crx-rpc';
 
 // Initialize RPC bridge for web page ↔ background communication
-const contentRpc = new ContentRPC();
+const contentRpc = new Web2BackgroundProxy();
 
 // Remember to dispose when cleanup is needed
 // contentRpc.dispose();
@@ -94,11 +96,11 @@ const contentRpc = new ContentRPC();
 
 ```typescript
 // content.ts
-import { ContentRPCClient } from 'crx-rpc';
+import { RuntimeRPCClient } from 'crx-rpc';
 import { IMathService } from './services/math';
 
 // Use content script as a direct RPC client
-const client = new ContentRPCClient();
+const client = new RuntimeRPCClient();
 const mathService = client.createWebRPCService(IMathService);
 
 // Direct calls to background services
@@ -113,14 +115,14 @@ console.log('Result from content script:', result);
 
 ```typescript
 // content.ts
-import { ContentRPC, ContentRPCClient } from 'crx-rpc';
+import { Web2BackgroundProxy, RuntimeRPCClient } from 'crx-rpc';
 import { IMathService } from './services/math';
 
 // Initialize bridge for web pages
-const bridge = new ContentRPC();
+const bridge = new Web2BackgroundProxy();
 
 // Also use as direct client
-const client = new ContentRPCClient();
+const client = new RuntimeRPCClient();
 const mathService = client.createWebRPCService(IMathService);
 
 // Content script can make its own RPC calls
@@ -166,16 +168,16 @@ graph LR
     end
 
     subgraph Content["Content Script"]
-        CR[ContentRPC Bridge]
+        CR[Web2BackgroundProxy Bridge]
     end
 
     subgraph Bg["Background"]
-        BR[BackgroundRPC]
+        BR[BackgroundRPCHost]
         Service[Services]
     end
 
     subgraph Ext["Extension Page"]
-        EC[ExtPageRPCClient]
+        EC[RuntimeRPCClient]
     end
 
     %% Web to Background Flow
@@ -200,7 +202,7 @@ graph LR
 
 | Path | Method | Description |
 |------|--------|-------------|
-| **Web Page → Background** | CustomEvent + chrome.runtime | Through ContentRPC bridge |
+| **Web Page → Background** | CustomEvent + chrome.runtime | Through Web2BackgroundProxy bridge |
 | **Content Script → Background** | chrome.runtime | Direct communication |
 | **Extension Page → Background** | chrome.runtime | Direct communication |
 | **Extension Page → Content Script** | chrome.tabs + TabRPCClient | Tab-specific access |
@@ -209,9 +211,9 @@ graph LR
 ### Key Components
 
 - **WebRPCClient**: Client for web pages using window events
-- **ContentRPC**: Bridge that forwards messages between web and background
-- **ContentRPCClient**: Direct RPC client for content scripts (bypasses bridge)
-- **BackgroundRPC**: Service registry and handler in the background script
+- **Web2BackgroundProxy**: Bridge that forwards messages between web and background
+- **RuntimeRPCClient**: Direct RPC client for content scripts (bypasses bridge)
+- **BackgroundRPCHost**: Service registry and handler in the background script
 - **RPCClient**: Base client with service proxy generation
 
 ## Logging Support
@@ -221,9 +223,9 @@ The framework includes built-in logging support for debugging and monitoring RPC
 ### Enable Logging
 
 ```typescript
-// Enable logging in BackgroundRPC
-const rpc = new BackgroundRPC(true); // Enable logging
-// const rpc = new BackgroundRPC(); // Disable logging (default)
+// Enable logging in BackgroundRPCHost
+const rpc = new BackgroundRPCHost(true); // Enable logging
+// const rpc = new BackgroundRPCHost(); // Disable logging (default)
 
 // Example output:
 // [RPC] Call: MathService.add { id: "123", args: [5, 3], senderId: 456, timestamp: "2025-09-01T10:00:00.000Z" }
@@ -259,7 +261,7 @@ The `RemoteSubjectManager` acts as a centralized message hub that handles all su
 
 ```typescript
 // background.ts
-import { BackgroundRPC, RemoteSubjectManager, createIdentifier } from 'crx-rpc';
+import { BackgroundRPCHost, RemoteSubjectManager, createIdentifier } from 'crx-rpc';
 
 interface ICounterObservable {
     value: number;
@@ -267,7 +269,7 @@ interface ICounterObservable {
 
 const ICounterObservable = createIdentifier<ICounterObservable>('Counter');
 
-const rpc = new BackgroundRPC();
+const rpc = new BackgroundRPCHost();
 
 // Create a centralized subject manager
 const subjectManager = new RemoteSubjectManager();
@@ -448,11 +450,11 @@ The Observable system supports multiple communication patterns with centralized 
 All RPC components extend the `Disposable` class for proper cleanup:
 
 ```typescript
-import { WebRPCClient, ContentRPC, BackgroundRPC } from 'crx-rpc';
+import { WebRPCClient, Web2BackgroundProxy, BackgroundRPCHost } from 'crx-rpc';
 
 const client = new WebRPCClient();
-const contentRpc = new ContentRPC();
-const backgroundRpc = new BackgroundRPC();
+const contentRpc = new Web2BackgroundProxy();
+const backgroundRpc = new BackgroundRPCHost();
 
 // Proper cleanup
 function cleanup() {
@@ -530,11 +532,11 @@ const contentHost = new ContentRPCHost();
 contentHost.register(IPageService, new PageService());
 
 // popup.ts - Access content script from popup
-import { TabRPCClient, ExtPageRPCClient } from 'crx-rpc';
+import { TabRPCClient, RuntimeRPCClient } from 'crx-rpc';
 import { IPageService, IMathService } from './services';
 
 // Access background services
-const bgClient = new ExtPageRPCClient();
+const bgClient = new RuntimeRPCClient();
 const mathService = bgClient.createWebRPCService(IMathService);
 
 // Access content script services in active tab
@@ -560,15 +562,15 @@ if (tab.id) {
 
 ### Scenario 1: Web Page Only
 - Web pages need to communicate with background services
-- Use: `WebRPCClient` + `ContentRPC` bridge
+- Use: `WebRPCClient` + `Web2BackgroundProxy` bridge
 
 ### Scenario 2: Content Script Only  
 - Content scripts need direct access to background services
-- Use: `ContentRPCClient` directly (no bridge needed)
+- Use: `RuntimeRPCClient` directly (no bridge needed)
 
 ### Scenario 3: Both Web Page and Content Script
 - Both contexts need RPC access
-- Use: `ContentRPC` bridge + `ContentRPCClient` for direct access
+- Use: `Web2BackgroundProxy` bridge + `RuntimeRPCClient` for direct access
 
 ### Scenario 4: Real-time Data Streaming
 - Background needs to push updates to multiple contexts
@@ -578,10 +580,10 @@ if (tab.id) {
 
 ### Core Classes
 
-- **`BackgroundRPC`**: Service registry and message handler for background scripts
-- **`ContentRPC`**: Message bridge between web pages and background scripts
+- **`BackgroundRPCHost`**: Service registry and message handler for background scripts
+- **`Web2BackgroundProxy`**: Message bridge between web pages and background scripts
 - **`WebRPCClient`**: RPC client for web pages
-- **`ContentRPCClient`**: Direct RPC client for content scripts
+- **`RuntimeRPCClient`**: Direct RPC client for content scripts
 - **`RemoteSubjectManager`**: Centralized observable message management system
 
 ### Observable Classes
@@ -602,36 +604,6 @@ if (tab.id) {
 - **`RpcResponse`**: RPC response message structure
 - **`IMessageAdapter`**: Message transport abstraction interface
 - **`IDisposable`**: Resource management interface
-
-## Best Practices
-
-1. **Service Interface Design**
-   - Use clear method names and proper TypeScript types
-   - Return Promise types for async operation support
-   - Define detailed parameter and return value types
-   - Keep interfaces focused and cohesive
-
-2. **Resource Management**
-   - Always call `dispose()` on RPC instances when cleanup is needed
-   - Check `isDisposed()` before using disposed instances
-   - Use proper cleanup in component unmount/destroy lifecycle
-
-3. **Error Handling**
-   - Implement proper error handling in service methods
-   - Throw meaningful errors with descriptive messages
-   - Handle RPC errors appropriately on the client side
-
-4. **Performance Optimization**
-   - Avoid frequent small data transfers
-   - Consider batching operations when possible
-   - Use Observable pattern for real-time data updates with `RemoteSubjectManager` for efficient message routing
-   - Implement caching strategies where appropriate
-   - The manager automatically handles subscription queuing to prevent race conditions
-
-5. **Security Considerations**
-   - Validate input parameters in service implementations
-   - Don't expose sensitive operations through RPC
-   - Consider rate limiting for resource-intensive operations
 
 ## License
 
