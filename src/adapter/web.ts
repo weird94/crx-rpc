@@ -2,7 +2,7 @@ import { BaseObservable, RPCClient } from "../client";
 import { Identifier } from "../id";
 import { IMessageAdapter } from "../types";
 
-export const webMessageAdapter: IMessageAdapter = {
+const webMessageAdapter: IMessageAdapter = {
     onMessage<T>(type: string, callback: (message: T) => void) {
         const handler = (event: any) => {
             callback(event.detail);
@@ -17,6 +17,9 @@ export const webMessageAdapter: IMessageAdapter = {
     },
 };
 
+/**
+ * 在 web-page 中使用的 rpc-client，可以调用content-rpc-serive或者background-rpc-service
+ */
 export class WebRPCClient extends RPCClient {
     constructor() {
         super(webMessageAdapter, 'web');

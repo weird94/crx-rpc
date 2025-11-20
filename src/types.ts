@@ -1,5 +1,5 @@
 export type RpcTo = 'content' | 'background'
-export type RpcFrom = 'content' | 'wxt-page' | 'web'
+export type RpcFrom = 'runtime'| 'web' | 'wxt-page'
 
 export interface RpcRequest {
     id: string;

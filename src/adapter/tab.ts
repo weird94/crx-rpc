@@ -3,7 +3,7 @@ import { RPCClient } from '../client';
 import { Disposable } from '../disposable';
 import type { IMessageAdapter } from '../types';
 
-export class TabMessageAdapter extends Disposable implements IMessageAdapter {
+class TabMessageAdapter extends Disposable implements IMessageAdapter {
     private runtimeChannel = createRuntimeMessageChannel<any>();
     private tabChannel: ReturnType<typeof createTabMessageChannel>;
 
@@ -36,6 +36,9 @@ export class TabMessageAdapter extends Disposable implements IMessageAdapter {
     }
 }
 
+/**
+ * 在 background/popup 中使用的 rpc-client，可以调用指定 tab 的 content-rpc-service
+ */
 export class TabRPCClient extends RPCClient {
     private adapter: TabMessageAdapter;
 

@@ -5,7 +5,7 @@ import { Identifier } from "../id";
 
 export const runtimeChannel = createRuntimeMessageChannel<any>();
 
-export const contentMessageAdapter: IMessageAdapter = {
+const runtimeMessageAdapter: IMessageAdapter = {
     onMessage<T>(type: string, callback: (message: T) => void) {
         const handler = (msg: { type?: string } & T) => {
             if (msg.type === type) {
@@ -22,18 +22,21 @@ export const contentMessageAdapter: IMessageAdapter = {
     },
 };
 
-export class ContentRPCClient extends RPCClient {
+/**
+ * 在 content-script/popup/sidepanel 中使用的 rpc-client，可以调用 background-rpc-service
+ */
+export class RuntimeRPCClient extends RPCClient {
     constructor() {
-        super(contentMessageAdapter, 'content');
+        super(runtimeMessageAdapter, 'runtime');
     }
 }
 
-export class ContentObservable<T> extends BaseObservable<T> {
+export class RuntimeObservable<T> extends BaseObservable<T> {
     constructor(
         identifier: Identifier<T>,
         key: string,
         callback: (value: T) => void,
     ) {
-        super(identifier, key, callback, contentMessageAdapter);
+        super(identifier, key, callback, runtimeMessageAdapter);
     }
 }
