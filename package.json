@@ -1,34 +1,34 @@
 {
-    "name": "crx-rpc",
-    "version": "2.0.0",
-    "description": "A lightweight RPC framework for Chrome Extension (background <-> content <-> web)",
-    "repository": {
-        "type": "git",
-        "url": "https://github.com/weird94/crx-rpc"
-    },
-    "author": "weird94",
-    "license": "MIT",
-    "keywords": [
-        "chrome-extension",
-        "rpc",
-        "content-script",
-        "background",
-        "typescript"
-    ],
-    "main": "dist/index.js",
-    "types": "dist/index.d.ts",
-    "scripts": {
-        "build": "tsc",
-        "watch": "tsc -w",
-        "clean": "rm -rf dist",
-        "postinstall": "tsc"
-    },
-    "dependencies": {
-        "@webext-core/messaging": "file:packages/webext-core-messaging"
-    },
-    "devDependencies": {
-        "@types/chrome": "^0.0.270",
-        "@types/node": "^24.3.0",
-        "typescript": "^5.2.2"
-    }
+  "name": "crx-rpc",
+  "version": "2.1.0",
+  "description": "A lightweight RPC framework for Chrome Extension (background <-> content <-> web)",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/weird94/crx-rpc"
+  },
+  "author": "weird94",
+  "license": "MIT",
+  "keywords": [
+    "chrome-extension",
+    "rpc",
+    "content-script",
+    "background",
+    "typescript"
+  ],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "clean": "rm -rf dist",
+    "postinstall": "tsc"
+  },
+  "dependencies": {
+    "@webext-core/messaging": "file:packages/webext-core-messaging"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.270",
+    "@types/node": "^24.3.0",
+    "typescript": "^5.2.2"
+  }
 }
