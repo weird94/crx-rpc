@@ -1,6 +1,26 @@
 # crx-rpc
 
+[![npm version](https://img.shields.io/npm/v/crx-rpc.svg)](https://www.npmjs.com/package/crx-rpc)
+[![npm downloads](https://img.shields.io/npm/dm/crx-rpc.svg)](https://www.npmjs.com/package/crx-rpc)
+[![license](https://img.shields.io/npm/l/crx-rpc.svg)](https://github.com/weird94/crx-rpc/blob/main/LICENSE)
+
 A type-safe RPC implementation for Chrome Extensions, supporting communication between Content Scripts, Background, Popup/Sidepanel, and Web Pages.
+
+## Installation
+
+```bash
+npm install crx-rpc
+```
+
+Or using other package managers:
+
+```bash
+# pnpm
+pnpm add crx-rpc
+
+# yarn
+yarn add crx-rpc
+```
 
 ## Features
 
@@ -28,12 +48,12 @@ Callers can be:
 
 ### Supported Flows
 
-| Caller | Target | Client | Host | Note |
-| :--- | :--- | :--- | :--- | :--- |
-| **Content Script** | **Background** | `RuntimeRPCClient` | `BackgroundRPCHost` | Standard Runtime -> Background communication. |
-| **Web Page** | **Background** | `WebRPCClient` | `BackgroundRPCHost` | Relayed via Content Script (`Web2BackgroundProxy`). |
-| **Background** | **Content Script** | `TabRPCClient` | `ContentRPCHost` | Targets a specific tab. |
-| **Popup/Sidepanel** | **Content Script** | `TabRPCClient` | `ContentRPCHost` | Targets a specific tab. |
+| Caller              | Target             | Client             | Host                | Note                                                |
+| :------------------ | :----------------- | :----------------- | :------------------ | :-------------------------------------------------- |
+| **Content Script**  | **Background**     | `RuntimeRPCClient` | `BackgroundRPCHost` | Standard Runtime -> Background communication.       |
+| **Web Page**        | **Background**     | `WebRPCClient`     | `BackgroundRPCHost` | Relayed via Content Script (`Web2BackgroundProxy`). |
+| **Background**      | **Content Script** | `TabRPCClient`     | `ContentRPCHost`    | Targets a specific tab.                             |
+| **Popup/Sidepanel** | **Content Script** | `TabRPCClient`     | `ContentRPCHost`    | Targets a specific tab.                             |
 
 > **Note**: Direct communication from Popup/Sidepanel to Background using `RuntimeRPCClient` is currently not supported by `BackgroundRPCHost` as it requires a sender tab ID.
 
@@ -44,13 +64,13 @@ Callers can be:
 Define your service interface and create an identifier.
 
 ```typescript
-import { createIdentifier } from 'crx-rpc';
+import { createIdentifier } from 'crx-rpc'
 
 export interface IMathService {
-  add(a: number, b: number): Promise<number>;
+  add(a: number, b: number): Promise<number>
 }
 
-export const IMathService = createIdentifier<IMathService>('math-service', 'background');
+export const IMathService = createIdentifier<IMathService>('math-service', 'background')
 ```
 
 ### 2. Implement & Host Service
@@ -59,32 +79,32 @@ export const IMathService = createIdentifier<IMathService>('math-service', 'back
 
 ```typescript
 // background.ts
-import { BackgroundRPCHost } from 'crx-rpc';
-import { IMathService } from './api';
+import { BackgroundRPCHost } from 'crx-rpc'
+import { IMathService } from './api'
 
 class MathService implements IMathService {
   async add(a: number, b: number) {
-    return a + b;
+    return a + b
   }
 }
 
-const host = new BackgroundRPCHost();
-host.register(IMathService, new MathService());
+const host = new BackgroundRPCHost()
+host.register(IMathService, new MathService())
 ```
 
 #### In Content Script
 
 ```typescript
 // content.ts
-import { ContentRPCHost, createIdentifier } from 'crx-rpc';
+import { ContentRPCHost, createIdentifier } from 'crx-rpc'
 
 export interface IPageService {
-    doSomething(): void;
+  doSomething(): void
 }
-export const IPageService = createIdentifier<IPageService>('page-service', 'content');
+export const IPageService = createIdentifier<IPageService>('page-service', 'content')
 
-const host = new ContentRPCHost();
-host.register(IPageService, new PageService());
+const host = new ContentRPCHost()
+host.register(IPageService, new PageService())
 ```
 
 ### 3. Call Service
@@ -92,61 +112,61 @@ host.register(IPageService, new PageService());
 #### From Content Script (to Background)
 
 ```typescript
-import { RuntimeRPCClient } from 'crx-rpc';
-import { IMathService } from './api';
+import { RuntimeRPCClient } from 'crx-rpc'
+import { IMathService } from './api'
 
-const client = new RuntimeRPCClient();
-const mathService = client.createRPCService(IMathService);
+const client = new RuntimeRPCClient()
+const mathService = client.createRPCService(IMathService)
 
-await mathService.add(1, 2);
+await mathService.add(1, 2)
 ```
 
 #### From Web Page (to Background)
 
 ```typescript
-import { WebRPCClient } from 'crx-rpc';
-import { IMathService } from './api';
+import { WebRPCClient } from 'crx-rpc'
+import { IMathService } from './api'
 
-const client = new WebRPCClient();
-const mathService = client.createRPCService(IMathService);
+const client = new WebRPCClient()
+const mathService = client.createRPCService(IMathService)
 
-await mathService.add(1, 2);
+await mathService.add(1, 2)
 ```
 
-*Note: Requires `Web2BackgroundProxy` to be active in the content script.*
+_Note: Requires `Web2BackgroundProxy` to be active in the content script._
 
 ```typescript
 // content.ts
-import { Web2BackgroundProxy } from 'crx-rpc';
-const proxy = new Web2BackgroundProxy();
+import { Web2BackgroundProxy } from 'crx-rpc'
+const proxy = new Web2BackgroundProxy()
 ```
 
 #### From Background/Popup (to Content)
 
 ```typescript
-import { TabRPCClient } from 'crx-rpc';
-import { IPageService } from './api';
+import { TabRPCClient } from 'crx-rpc'
+import { IPageService } from './api'
 
-const tabId = 123; // Target Tab ID
-const client = new TabRPCClient(tabId);
-const pageService = client.createRPCService(IPageService);
+const tabId = 123 // Target Tab ID
+const client = new TabRPCClient(tabId)
+const pageService = client.createRPCService(IPageService)
 
-await pageService.doSomething();
+await pageService.doSomething()
 ```
 
 ## API Reference
 
 ### Hosts
 
--   `BackgroundRPCHost`: Handles RPC requests in the background script.
--   `ContentRPCHost`: Handles RPC requests in the content script.
+- `BackgroundRPCHost`: Handles RPC requests in the background script.
+- `ContentRPCHost`: Handles RPC requests in the content script.
 
 ### Clients
 
--   `RuntimeRPCClient`: Used in Content Scripts to call Background services.
--   `WebRPCClient`: Used in Web Pages to call Background services (via relay).
--   `TabRPCClient`: Used in Background/Popup to call Content Script services for a specific tab.
+- `RuntimeRPCClient`: Used in Content Scripts to call Background services.
+- `WebRPCClient`: Used in Web Pages to call Background services (via relay).
+- `TabRPCClient`: Used in Background/Popup to call Content Script services for a specific tab.
 
 ### Proxies
 
--   `Web2BackgroundProxy`: Relays messages from Web Page to Background. Must be instantiated in the Content Script.
+- `Web2BackgroundProxy`: Relays messages from Web Page to Background. Must be instantiated in the Content Script.
