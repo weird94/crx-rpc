@@ -156,6 +156,8 @@ export class BackgroundRPCHost extends Disposable {
                 timestamp: new Date().toISOString(),
               }
             )
+          } else {
+            console.error('RPC Error:', service, method, err)
           }
           sendResponse({
             id,

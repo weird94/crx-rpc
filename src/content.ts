@@ -194,6 +194,8 @@ export class ContentRPCHost extends Disposable {
                 timestamp: new Date().toISOString(),
               }
             )
+          } else {
+            console.error('RPC Error (tab):', service, method, err)
           }
           sendResponse({
             id,
