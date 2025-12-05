@@ -2,6 +2,7 @@ import {
   OBSERVABLE_EVENT,
   RPC_EVENT_NAME,
   RPC_RESPONSE_EVENT_NAME,
+  SUBSCRIBABLE_OBSERVABLE,
   UNSUBSCRIBE_OBSERVABLE,
 } from './const'
 import type {
@@ -120,7 +121,7 @@ export class BaseObservable<T> extends Disposable {
       })
     )
 
-    this._adapter.sendMessage(OBSERVABLE_EVENT, { key: this._finalKey })
+    this._adapter.sendMessage(SUBSCRIBABLE_OBSERVABLE, { key: this._finalKey })
   }
 
   unsubscribe(): void {
