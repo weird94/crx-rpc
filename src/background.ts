@@ -21,19 +21,34 @@ export class BackgroundRPCHost extends Disposable {
 
   constructor(private log: boolean = false) {
     super()
-    const handler = (msg: RpcRequest & { type?: string }, sender: chrome.runtime.MessageSender) => {
-      if (msg.type !== RPC_EVENT_NAME) return
-      const senderId = sender.tab?.id
-      if (!senderId) {
-        console.warn('Received RPC request from unknown sender, ignoring.', msg)
-        return
-      }
+    const handler = (
+      msg: RpcRequest & { type?: string },
+      sender: chrome.runtime.MessageSender,
+      sendResponseCallback: (response?: any) => void
+    ) => {
+      if (msg.type !== RPC_EVENT_NAME) return false
+
+      const tabId = sender.tab?.id
+      const isFromRuntime = !tabId // sidepanel/popup 没有 tab id
+
+      // 根据来源选择不同的响应方式
       const sendResponse = (response: Omit<RpcResponse, 'from'>) => {
-        chrome.tabs.sendMessage(senderId, {
+        const fullResponse = {
           ...response,
           type: RPC_RESPONSE_EVENT_NAME,
           from: msg.from,
-        })
+        }
+
+        if (isFromRuntime) {
+          // 来自 sidepanel/popup，使用 runtime.sendMessage 广播响应
+          // 这样 RuntimeRPCClient 的 onMessage 可以收到
+          chrome.runtime.sendMessage(fullResponse).catch(() => {
+            // 忽略错误，可能没有监听者
+          })
+        } else {
+          // 来自 content script，使用 tabs.sendMessage
+          chrome.tabs.sendMessage(tabId, fullResponse)
+        }
       }
 
       const { id, method, args, service } = msg
@@ -52,7 +67,7 @@ export class BackgroundRPCHost extends Disposable {
           'color: #6b7280; font-weight: 500;', // ]
           {
             args,
-            senderId,
+            from: isFromRuntime ? 'runtime' : `tab:${tabId}`,
             timestamp: new Date().toISOString(),
           }
         )
@@ -69,7 +84,7 @@ export class BackgroundRPCHost extends Disposable {
             'background: #2563eb; color: white; font-weight: bold; padding: 1px 4px; border-radius: 2px;', // id 蓝色背景
             'color: #6b7280; font-weight: 500;', // ]
             {
-              senderId,
+              from: isFromRuntime ? 'runtime' : `tab:${tabId}`,
               timestamp: new Date().toISOString(),
             }
           )
@@ -97,7 +112,7 @@ export class BackgroundRPCHost extends Disposable {
             'background: #2563eb; color: white; font-weight: bold; padding: 1px 4px; border-radius: 2px;', // id 蓝色背景
             'color: #6b7280; font-weight: 500;', // ]
             {
-              senderId,
+              from: isFromRuntime ? 'runtime' : `tab:${tabId}`,
               timestamp: new Date().toISOString(),
             }
           )
