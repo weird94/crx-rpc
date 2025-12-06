@@ -285,18 +285,9 @@ export class RemoteSubjectManager extends Disposable {
 
   private handleSubscription(key: string) {
     const subject = this.subjects.get(key)
-    console.log(
-      '===handleSubscription key:',
-      key,
-      'subject exists:',
-      !!subject,
-      'all keys:',
-      Array.from(this.subjects.keys())
-    )
 
     if (subject) {
       // 发送初始值 - 使用广播方式，这样订阅者的 onMessage 才能收到
-      console.log('===sending initial value for key:', key, 'value:', subject.getInitialValue())
       chrome.runtime
         .sendMessage({
           operation: 'next',
@@ -311,7 +302,6 @@ export class RemoteSubjectManager extends Disposable {
   }
 
   sendMessage(message: RpcObservableUpdateMessage<any>) {
-    console.log('===RemoteSubjectManager sendMessage:', message)
     chrome.runtime.sendMessage(message)
   }
 
