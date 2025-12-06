@@ -107,7 +107,8 @@ export class BaseObservable<T> extends Disposable {
     super()
     this.disposeWithMe(
       this._adapter.onMessage(OBSERVABLE_EVENT, (event: any) => {
-        const msg = event.detail as RpcObservableUpdateMessage<T>
+        // 支持两种格式：直接消息对象（runtime adapter）或 CustomEvent detail（web adapter）
+        const msg = (event.detail ?? event) as RpcObservableUpdateMessage<T>
         if (msg.key !== this._finalKey) return
 
         if (msg.operation === 'next' && !this.completed && msg.value) {

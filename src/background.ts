@@ -7,6 +7,7 @@ import {
   UNSUBSCRIBE_OBSERVABLE,
 } from './const'
 import type {
+  RpcContext,
   RpcRequest,
   RpcResponse,
   RpcService,
@@ -127,8 +128,15 @@ export class BackgroundRPCHost extends Disposable {
         return true
       }
 
+      // 构建 RPC 上下文，自动注入到 service 方法的最后一个参数
+      const rpcContext: RpcContext = {
+        tabId,
+        sender,
+        isFromRuntime,
+      }
+
       Promise.resolve()
-        .then(() => serviceInstance[method](...args))
+        .then(() => serviceInstance[method](...args, rpcContext))
         .then(result => {
           if (this.log) {
             console.log(
@@ -217,6 +225,7 @@ export class RemoteSubject<T> extends Disposable implements SubjectLike<T> {
   }
 
   next(value: T): void {
+    console.log('===RemoteSubject next:', value)
     if (this.completed) return
     this.manager.sendMessage({
       operation: 'next',
@@ -253,12 +262,11 @@ export class RemoteSubjectManager extends Disposable {
 
     const handleMessage = (
       msg: RpcObservableSubscribeMessage,
-      sender: chrome.runtime.MessageSender,
-      response: (response?: any) => void
+      sender: chrome.runtime.MessageSender
     ) => {
       if (msg.type === SUBSCRIBABLE_OBSERVABLE) {
         const { key } = msg
-        this.handleSubscription(key, response)
+        this.handleSubscription(key)
       }
     }
 
@@ -268,31 +276,46 @@ export class RemoteSubjectManager extends Disposable {
     })
   }
 
-  private handleSubscription(key: string, response: (data?: any) => void) {
+  private handleSubscription(key: string) {
     const subject = this.subjects.get(key)
+    console.log(
+      '===handleSubscription key:',
+      key,
+      'subject exists:',
+      !!subject,
+      'all keys:',
+      Array.from(this.subjects.keys())
+    )
 
     if (subject) {
-      // 发送初始值
-      response({
-        operation: 'next',
-        key,
-        value: subject.getInitialValue(),
-        type: OBSERVABLE_EVENT,
-      })
+      // 发送初始值 - 使用广播方式，这样订阅者的 onMessage 才能收到
+      console.log('===sending initial value for key:', key, 'value:', subject.getInitialValue())
+      chrome.runtime
+        .sendMessage({
+          operation: 'next',
+          key,
+          value: subject.getInitialValue(),
+          type: OBSERVABLE_EVENT,
+        })
+        .catch(() => {
+          // 忽略错误，可能没有监听者
+        })
     }
   }
 
   sendMessage(message: RpcObservableUpdateMessage<any>) {
+    console.log('===RemoteSubjectManager sendMessage:', message)
     chrome.runtime.sendMessage(message)
   }
 
   createSubject<T>(id: Identifier<T>, key: string, initialValue: T): RemoteSubject<T> {
     const subject = new RemoteSubject<T>(id, key, initialValue, this)
-    this.subjects.set(key, subject)
+    // 使用 finalKey 作为存储 key，与客户端订阅时发送的 key 保持一致
+    this.subjects.set(subject.finalKey, subject)
 
     chrome.runtime.sendMessage({
       operation: 'next',
-      key,
+      key: subject.finalKey,
       value: initialValue,
       type: OBSERVABLE_EVENT,
     })
