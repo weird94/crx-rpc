@@ -211,6 +211,8 @@ export class BackgroundRPCHost extends Disposable {
 export class RemoteSubject<T> extends Disposable implements SubjectLike<T> {
   private completed = false
 
+  private _value: T
+
   get finalKey() {
     return `${this.identifier.key}-${this._key}`
   }
@@ -222,11 +224,16 @@ export class RemoteSubject<T> extends Disposable implements SubjectLike<T> {
     private manager: RemoteSubjectManager
   ) {
     super()
+    this._value = initialValue
+  }
+
+  get value(): T {
+    return this._value
   }
 
   next(value: T): void {
-    console.log('===RemoteSubject next:', value)
     if (this.completed) return
+    this._value = value
     this.manager.sendMessage({
       operation: 'next',
       key: this.finalKey,
