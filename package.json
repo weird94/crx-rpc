@@ -21,7 +21,8 @@
     "build": "tsc",
     "watch": "tsc -w",
     "clean": "rm -rf dist",
-    "postinstall": "tsc"
+    "postinstall": "tsc",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.270",
