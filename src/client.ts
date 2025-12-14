@@ -118,6 +118,9 @@ export class RPCClient extends Disposable {
     // 创建代理对象，拦截方法调用
     return new Proxy({} as ServiceProxy<T>, {
       get: (target, prop: string | symbol) => {
+        if (prop === 'then') {
+          return undefined
+        }
         if (typeof prop === 'string') {
           // 返回一个代理函数
           return (...args: any[]) => {
