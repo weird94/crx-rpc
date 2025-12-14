@@ -2,6 +2,8 @@ import type { Identifier } from './id'
 import {
   OBSERVABLE_EVENT,
   RPC_EVENT_NAME,
+  RPC_PING,
+  RPC_PONG,
   RPC_RESPONSE_EVENT_NAME,
   SUBSCRIBABLE_OBSERVABLE,
   UNSUBSCRIBE_OBSERVABLE,
@@ -27,10 +29,23 @@ export class BackgroundRPCHost extends Disposable {
       sender: chrome.runtime.MessageSender,
       sendResponseCallback: (response?: any) => void
     ) => {
-      if (msg.type !== RPC_EVENT_NAME) return false
+      if (msg.type !== RPC_EVENT_NAME && msg.type !== RPC_PING) return false
 
       const tabId = sender.tab?.id
       const isFromRuntime = !tabId // sidepanel/popup 没有 tab id
+
+      if (msg.type === RPC_PING) {
+        const pong = {
+          type: RPC_PONG,
+          from: 'background',
+        }
+        if (isFromRuntime) {
+          chrome.runtime.sendMessage(pong).catch(() => {})
+        } else {
+          chrome.tabs.sendMessage(tabId, pong)
+        }
+        return true
+      }
 
       // 根据来源选择不同的响应方式
       const sendResponse = (response: Omit<RpcResponse, 'from'>) => {

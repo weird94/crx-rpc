@@ -1,6 +1,8 @@
 import {
   OBSERVABLE_EVENT,
   RPC_EVENT_NAME,
+  RPC_PING,
+  RPC_PONG,
   RPC_RESPONSE_EVENT_NAME,
   SUBSCRIBABLE_OBSERVABLE,
   UNSUBSCRIBE_OBSERVABLE,
@@ -72,8 +74,46 @@ export class RPCClient extends Disposable {
     })
   }
 
-  createRPCService<T>(serviceIdentifier: Identifier<T>): ServiceProxy<T> {
+  private async waitReady(timeout = 10000): Promise<void> {
+    const startTime = Date.now()
+    const check = async () => {
+      return new Promise<boolean>(resolve => {
+        let resolved = false
+        const timer = setTimeout(() => {
+          if (!resolved) {
+            resolved = true
+            resolve(false)
+          }
+        }, 1000)
+
+        const handler = (msg: any) => {
+          if (msg.type === RPC_PONG) {
+            if (!resolved) {
+              resolved = true
+              resolve(true)
+            }
+            dispose()
+          }
+        }
+
+        const dispose = this.messageAdapter.onMessage(RPC_PONG, handler)
+        this.messageAdapter.sendMessage(RPC_PING, { type: RPC_PING })
+      })
+    }
+
+    while (Date.now() - startTime < timeout) {
+      const ready = await check()
+      if (ready) return
+      await new Promise(r => setTimeout(r, 500))
+    }
+
+    throw new Error('RPC service not ready (timeout)')
+  }
+
+  async createRPCService<T>(serviceIdentifier: Identifier<T>): Promise<ServiceProxy<T>> {
     const serviceKey = serviceIdentifier.key
+
+    await this.waitReady()
 
     // 创建代理对象，拦截方法调用
     return new Proxy({} as ServiceProxy<T>, {

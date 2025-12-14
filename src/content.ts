@@ -1,6 +1,8 @@
 import {
   OBSERVABLE_EVENT,
   RPC_EVENT_NAME,
+  RPC_PING,
+  RPC_PONG,
   RPC_RESPONSE_EVENT_NAME,
   SUBSCRIBABLE_OBSERVABLE,
   UNSUBSCRIBE_OBSERVABLE,
@@ -11,7 +13,7 @@ import type { RpcRequest, RpcResponse, RpcService } from './types'
 import { runtimeChannel } from './adapter'
 
 const WEB_TO_BACKGROUND = [RPC_EVENT_NAME, SUBSCRIBABLE_OBSERVABLE, UNSUBSCRIBE_OBSERVABLE]
-const BACKGROUND_TO_WEB = [RPC_RESPONSE_EVENT_NAME, OBSERVABLE_EVENT]
+const BACKGROUND_TO_WEB = [RPC_RESPONSE_EVENT_NAME, OBSERVABLE_EVENT, RPC_PONG]
 
 function getRuntimeId(): string | undefined {
   const browserNs = (globalThis as any)?.browser
@@ -64,6 +66,15 @@ export class ContentRPCHost extends Disposable {
     super()
 
     const handler = (msg: RpcRequest & { type?: string }, sender: chrome.runtime.MessageSender) => {
+      if (msg.type === RPC_PING) {
+        runtimeChannel
+          .sendMessage({
+            type: RPC_PONG,
+            from: 'content',
+          })
+          .catch(() => {})
+        return
+      }
       if (msg.type !== RPC_EVENT_NAME) return
       if (this.runtimeId && sender.id && sender.id !== this.runtimeId) return
 

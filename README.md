@@ -116,7 +116,7 @@ import { RuntimeRPCClient } from 'crx-rpc'
 import { IMathService } from './api'
 
 const client = new RuntimeRPCClient()
-const mathService = client.createRPCService(IMathService)
+const mathService = await client.createRPCService(IMathService)
 
 await mathService.add(1, 2)
 ```
@@ -128,7 +128,7 @@ import { WebRPCClient } from 'crx-rpc'
 import { IMathService } from './api'
 
 const client = new WebRPCClient()
-const mathService = client.createRPCService(IMathService)
+const mathService = await client.createRPCService(IMathService)
 
 await mathService.add(1, 2)
 ```
@@ -149,7 +149,7 @@ import { IPageService } from './api'
 
 const tabId = 123 // Target Tab ID
 const client = new TabRPCClient(tabId)
-const pageService = client.createRPCService(IPageService)
+const pageService = await client.createRPCService(IPageService)
 
 await pageService.doSomething()
 ```
