@@ -1,3 +1,4 @@
+import { runtimeChannel } from './adapter'
 import {
   OBSERVABLE_EVENT,
   RPC_EVENT_NAME,
@@ -10,7 +11,6 @@ import {
 import { Disposable } from './disposable'
 import { Identifier } from './id'
 import type { RpcRequest, RpcResponse, RpcService } from './types'
-import { runtimeChannel } from './adapter'
 
 const WEB_TO_BACKGROUND = [RPC_EVENT_NAME, SUBSCRIBABLE_OBSERVABLE, UNSUBSCRIBE_OBSERVABLE]
 const BACKGROUND_TO_WEB = [RPC_RESPONSE_EVENT_NAME, OBSERVABLE_EVENT, RPC_PONG]
@@ -73,7 +73,7 @@ export class ContentRPCHost extends Disposable {
             from: 'content',
           })
           .catch(() => {})
-        return
+        return true
       }
       if (msg.type !== RPC_EVENT_NAME) return
       if (this.runtimeId && sender.id && sender.id !== this.runtimeId) return

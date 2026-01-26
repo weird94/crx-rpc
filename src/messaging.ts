@@ -145,7 +145,10 @@ function sendTabMessage(
 export interface RuntimeMessageChannel<TMessage = any> {
   sendMessage(message: TMessage): Promise<void>
   onMessage(
-    handler: (message: TMessage, sender: chrome.runtime.MessageSender) => void | Promise<void>
+    handler: (
+      message: TMessage,
+      sender: chrome.runtime.MessageSender
+    ) => boolean | void | Promise<void>
   ): () => void
 }
 
