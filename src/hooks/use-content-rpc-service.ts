@@ -11,13 +11,13 @@ type ServiceProxy<T> = {
     : never
 }
 
-interface UseRPCServiceOptions {
+interface UseContentRPCServiceOptions {
   /** 是否在 tabId 变化时自动创建新的服务实例 */
   autoRecreate?: boolean
   tabId?: number
 }
 
-interface UseRPCServiceResult<T> {
+interface UseContentRPCServiceResult<T> {
   /** RPC 服务代理实例，可以直接调用服务方法 */
   service: ServiceProxy<T> | null
   /** 当前活动 tab 的 ID */
@@ -38,7 +38,7 @@ interface UseRPCServiceResult<T> {
  * @example
  * ```tsx
  * // 基础用法 - 使用统一的 TableService
- * const { service, isLoading, error } = useRPCService(ITableService)
+ * const { service, isLoading, error } = useContentRPCService(ITableService)
  *
  * const handleDetect = async () => {
  *   if (!service) return
@@ -52,10 +52,10 @@ interface UseRPCServiceResult<T> {
  * }, [service])
  * ```
  */
-export function useRPCService<T>(
+export function useContentRPCService<T>(
   serviceIdentifier: Identifier<T>,
-  options: UseRPCServiceOptions = {}
-): UseRPCServiceResult<T> {
+  options: UseContentRPCServiceOptions = {}
+): UseContentRPCServiceResult<T> {
   const { autoRecreate = true, tabId: providedTabId } = options
 
   const [service, setService] = useState<ServiceProxy<T> | null>(null)
@@ -94,7 +94,7 @@ export function useRPCService<T>(
       const rpcService = await tabClient.createRPCService(serviceIdentifier)
       setService(rpcService as ServiceProxy<T>)
     } catch (err) {
-      console.error('[useRPCService] Failed to create service:', err)
+      console.error('[useContentRPCService] Failed to create service:', err)
       setError(err instanceof Error ? err : new Error(String(err)))
       setService(null)
     } finally {
@@ -143,4 +143,4 @@ export function useRPCService<T>(
   }
 }
 
-export default useRPCService
+export default useContentRPCService
