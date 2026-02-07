@@ -102,7 +102,7 @@ Services can be hosted in two locations:
 | **Popup/Sidepanel** | **Content Script** | `client.createRPCService(IContentService, { tabId })` |
 | **Web Page**        | **Content Script** | `client.createRPCService(IContentService)` (local) |
 
-> **Note**: Messages from web pages to background services are automatically relayed through content scripts. Messages to content services are handled locally when called from the same web page.
+> **Note**: Messages from web pages to background services are automatically relayed through content scripts. Messages from web pages to content services are handled locally within the same page context.
 
 ## RpcContext
 

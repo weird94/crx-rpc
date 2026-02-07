@@ -102,7 +102,7 @@ await contentService.doSomething()
 | **Popup/Sidepanel** | **Content Script** | `client.createRPCService(IContentService, { tabId })` |
 | **Web Page**        | **Content Script** | `client.createRPCService(IContentService)` (本地) |
 
-> **注意**: 从 web 页面到 background 服务的消息会自动通过 content script 转发。从同一个 web 页面调用 content 服务的消息在本地处理。
+> **注意**: 从 web 页面到 background 服务的消息会自动通过 content script 转发。从 web 页面到 content 服务的消息在同一页面上下文中本地处理。
 
 ## RpcContext
 
