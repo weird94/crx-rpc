@@ -10,7 +10,7 @@ import {
 } from './const'
 import { Disposable } from './disposable'
 import { Identifier } from './id'
-import type { RpcRequest, RpcResponse, RpcService } from './types'
+import type { RpcRequest, RpcResponse, RpcService, RpcContext } from './types'
 
 const WEB_TO_BACKGROUND = [RPC_EVENT_NAME, SUBSCRIBABLE_OBSERVABLE, UNSUBSCRIBE_OBSERVABLE]
 const BACKGROUND_TO_WEB = [RPC_RESPONSE_EVENT_NAME, OBSERVABLE_EVENT, RPC_PONG]
@@ -72,7 +72,7 @@ export class ContentRPCHost extends Disposable {
             type: RPC_PONG,
             from: 'content',
           })
-          .catch(() => {})
+          .catch(() => { })
         return true
       }
       if (msg.type !== RPC_EVENT_NAME) return
@@ -162,7 +162,15 @@ export class ContentRPCHost extends Disposable {
       }
 
       Promise.resolve()
-        .then(() => (serviceInstance as RpcService)[method](...args))
+        .then(() => {
+          // 构建 RPC 上下文，自动注入到 service 方法的最后一个参数
+          const rpcContext: RpcContext = {
+            tabId: sender.tab?.id,
+            sender,
+            isFromRuntime: !sender.tab?.id,
+          }
+          return (serviceInstance as RpcService)[method](...args, rpcContext)
+        })
         .then(result => {
           if (this.log) {
             console.log(
