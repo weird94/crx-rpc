@@ -27,41 +27,12 @@ yarn add crx-rpc
 - **类型安全**: 基于 TypeScript 构建。
 - **灵活**: 支持 Chrome 扩展内的多种通信路径。
 - **Observable**: 支持类似 RxJS 的 observable 以进行实时更新。
+- **统一 API**: 简化的 host 和 client API，自动环境检测。
+- **智能转发**: Content script 自动转发 web 消息到 background。
 
-## 通信架构
+## 快速开始（统一 API）
 
-本库促进了 Chrome 扩展不同部分之间的通信。
-
-### 服务提供者 (Service Providers)
-
-服务可以托管在两个位置：
-
-1.  **Background**: 使用 `BackgroundRPCHost` 托管。处理来自 Content Scripts 和 Web Pages 的请求。
-2.  **Content Script**: 使用 `ContentRPCHost` 托管。处理来自 Background 和 Popup/Sidepanel 的请求。
-
-### 调用方 (Callers)
-
-调用方可以是：
-
-1.  **Runtime**: Content Scripts, Popup, Sidepanel。
-2.  **Web**: 网页中注入的脚本。
-
-### 支持的流程
-
-| 调用方              | 目标               | 客户端             | 主机                | 说明                                               |
-| :------------------ | :----------------- | :----------------- | :------------------ | :------------------------------------------------- |
-| **Content Script**  | **Background**     | `RuntimeRPCClient` | `BackgroundRPCHost` | 标准的 Runtime -> Background 通信。                |
-| **Web Page**        | **Background**     | `WebRPCClient`     | `BackgroundRPCHost` | 通过 Content Script 中继 (`Web2BackgroundProxy`)。 |
-| **Background**      | **Content Script** | `TabRPCClient`     | `ContentRPCHost`    | 指向特定的标签页。                                 |
-| **Popup/Sidepanel** | **Content Script** | `TabRPCClient`     | `ContentRPCHost`    | 指向特定的标签页。                                 |
-
-> **注意**: 目前 `BackgroundRPCHost` 不支持从 Popup/Sidepanel 使用 `RuntimeRPCClient` 直接调用 Background，因为它需要发送者的 tab ID。
-
-## 使用方法
-
-### 1. 定义 API
-
-定义你的服务接口并创建标识符。
+### 1. 定义服务
 
 ```typescript
 import { createIdentifier } from 'crx-rpc'
@@ -73,13 +44,10 @@ export interface IMathService {
 export const IMathService = createIdentifier<IMathService>('math-service', 'background')
 ```
 
-### 2. 实现并托管服务
-
-#### 在 Background 中
+### 2. 托管服务（Background 或 Content）
 
 ```typescript
-// background.ts
-import { BackgroundRPCHost } from 'crx-rpc'
+import { createHost } from 'crx-rpc'
 import { IMathService } from './api'
 
 class MathService implements IMathService {
@@ -88,85 +56,95 @@ class MathService implements IMathService {
   }
 }
 
-const host = new BackgroundRPCHost()
+// 自动检测环境（background/content）
+// 在 content script 中，自动转发 web 消息到 background
+const host = createHost()
 host.register(IMathService, new MathService())
 ```
 
-#### 在 Content Script 中
+### 3. 调用服务（任意位置）
 
 ```typescript
-// content.ts
-import { ContentRPCHost, createIdentifier } from 'crx-rpc'
+import { createClient } from 'crx-rpc'
+import { IMathService } from './api'
 
-export interface IPageService {
-  doSomething(): void
+// 自动检测环境（runtime/web）
+const client = createClient()
+
+// 调用 background service
+const mathService = await client.createRPCService(IMathService)
+const result = await mathService.add(1, 2) // 3
+
+// 调用 content service（需提供 tabId）
+const contentService = await client.createRPCService(IContentService, { tabId: 123 })
+await contentService.doSomething()
+```
+
+### 主要改进
+
+- **无需手动环境检测**: `createHost()` 和 `createClient()` 自动检测环境
+- **无需手动设置代理**: Content script 自动转发 web 消息
+- **智能路由**: 发往 content service 的 web 消息在本地处理，只有发往 background 的消息才转发
+- **统一上下文注入**: Background 和 content service 都会接收 `RpcContext` 作为最后一个参数
+- **单一 client API**: 无需在 `RuntimeRPCClient`、`WebRPCClient` 或 `TabRPCClient` 之间选择
+
+## 特性
+
+- **类型安全**: 基于 TypeScript 构建。
+- **灵活**: 支持 Chrome 扩展内的多种通信路径。
+- **Observable**: 支持类似 RxJS 的 observable 以进行实时更新。
+
+## 通信架构
+
+本库促进了 Chrome 扩展不同部分之间的通信。
+
+### 服务提供者 (Service Providers)
+
+服务可以托管在两个位置：
+
+1.  **Background**: 托管在 background service worker。处理来自 Content Scripts、Popup/Sidepanel 和 Web Pages 的请求。
+2.  **Content Script**: 托管在 content script。处理来自 Background 和 Popup/Sidepanel 的请求。
+
+### 支持的通信流程
+
+使用统一 API，所有通信流程都自动处理：
+
+| 调用方              | 目标               | 用法                                            |
+| :------------------ | :----------------- | :---------------------------------------------- |
+| **Content Script**  | **Background**     | `client.createRPCService(IBackgroundService)`   |
+| **Web Page**        | **Background**     | `client.createRPCService(IBackgroundService)`   |
+| **Popup/Sidepanel** | **Background**     | `client.createRPCService(IBackgroundService)`   |
+| **Background**      | **Content Script** | `client.createRPCService(IContentService, { tabId })` |
+| **Popup/Sidepanel** | **Content Script** | `client.createRPCService(IContentService, { tabId })` |
+| **Web Page**        | **Content Script** | `client.createRPCService(IContentService)` (本地) |
+
+> **注意**: Web 到 background 的通信会自动通过 content script 中继。发往 content service 的消息如果在同一个 content script 中注册了服务则本地处理。
+
+## RpcContext
+
+`BackgroundRPCHost` 和 `ContentRPCHost`（使用统一 API 时）都会自动将 `RpcContext` 对象作为最后一个参数注入到服务方法中：
+
+```typescript
+import { RpcContext } from 'crx-rpc'
+
+class MathService implements IMathService {
+  async add(a: number, b: number, context: RpcContext) {
+    console.log('调用来自 tab:', context.tabId)
+    console.log('发送者:', context.sender)
+    console.log('是否来自 runtime 上下文:', context.isFromRuntime)
+    return a + b
+  }
 }
-export const IPageService = createIdentifier<IPageService>('page-service', 'content')
-
-const host = new ContentRPCHost()
-host.register(IPageService, new PageService())
 ```
 
-### 3. 调用服务
-
-#### 从 Content Script (调用 Background)
-
-```typescript
-import { RuntimeRPCClient } from 'crx-rpc'
-import { IMathService } from './api'
-
-const client = new RuntimeRPCClient()
-const mathService = await client.createRPCService(IMathService)
-
-await mathService.add(1, 2)
-```
-
-#### 从 Web Page (调用 Background)
-
-```typescript
-import { WebRPCClient } from 'crx-rpc'
-import { IMathService } from './api'
-
-const client = new WebRPCClient()
-const mathService = await client.createRPCService(IMathService)
-
-await mathService.add(1, 2)
-```
-
-_注意: 需要在 Content Script 中激活 `Web2BackgroundProxy`。_
-
-```typescript
-// content.ts
-import { Web2BackgroundProxy } from 'crx-rpc'
-const proxy = new Web2BackgroundProxy()
-```
-
-#### 从 Background/Popup (调用 Content)
-
-```typescript
-import { TabRPCClient } from 'crx-rpc'
-import { IPageService } from './api'
-
-const tabId = 123 // 目标 Tab ID
-const client = new TabRPCClient(tabId)
-const pageService = await client.createRPCService(IPageService)
-
-await pageService.doSomething()
-```
+`RpcContext` 包含：
+- `tabId`: 调用者的 tab ID（popup/sidepanel 为 undefined）
+- `sender`: 完整的 Chrome MessageSender 对象
+- `isFromRuntime`: 布尔值，表示调用是否来自 runtime 上下文（popup/sidepanel）而非 content script
 
 ## API 参考
 
-### 主机 (Hosts)
-
-- `BackgroundRPCHost`: 处理 background script 中的 RPC 请求。
-- `ContentRPCHost`: 处理 content script 中的 RPC 请求。
-
-### 客户端 (Clients)
-
-- `RuntimeRPCClient`: 用于在 Content Scripts 中调用 Background 服务。
-- `WebRPCClient`: 用于在 Web Pages 中调用 Background 服务（通过中继）。
-- `TabRPCClient`: 用于在 Background/Popup 中调用特定标签页的 Content Script 服务。
-
-### 代理 (Proxies)
-
-- `Web2BackgroundProxy`: 将消息从 Web Page 中继到 Background。必须在 Content Script 中实例化。
+- `createHost(log?: boolean)`: 创建自动检测环境的统一 RPC host
+- `UnifiedRPCHost`: 统一 host 类，自动环境检测和智能 web 转发
+- `createClient()`: 创建自动检测环境的统一 RPC client
+- `UnifiedRPCClient`: 统一 client 类，自动环境检测和动态 tabId 支持

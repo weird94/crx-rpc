@@ -27,41 +27,12 @@ yarn add crx-rpc
 - **Type-safe**: Built with TypeScript.
 - **Flexible**: Supports various communication paths within a Chrome Extension.
 - **Observable**: Supports RxJS-like observables for real-time updates.
+- **Unified API**: Simplified host and client APIs with automatic environment detection.
+- **Smart Forwarding**: Automatic web-to-background message relay in content scripts.
 
-## Communication Architecture
+## Quick Start (Unified API)
 
-The library facilitates communication between different parts of a Chrome Extension.
-
-### Service Providers
-
-Services can be hosted in two locations:
-
-1.  **Background**: Hosted using `BackgroundRPCHost`. Handles requests from Content Scripts and Web Pages.
-2.  **Content Script**: Hosted using `ContentRPCHost`. Handles requests from Background and Popup/Sidepanel.
-
-### Callers
-
-Callers can be:
-
-1.  **Runtime**: Content Scripts, Popup, Sidepanel.
-2.  **Web**: Injected scripts in the web page.
-
-### Supported Flows
-
-| Caller              | Target             | Client             | Host                | Note                                                |
-| :------------------ | :----------------- | :----------------- | :------------------ | :-------------------------------------------------- |
-| **Content Script**  | **Background**     | `RuntimeRPCClient` | `BackgroundRPCHost` | Standard Runtime -> Background communication.       |
-| **Web Page**        | **Background**     | `WebRPCClient`     | `BackgroundRPCHost` | Relayed via Content Script (`Web2BackgroundProxy`). |
-| **Background**      | **Content Script** | `TabRPCClient`     | `ContentRPCHost`    | Targets a specific tab.                             |
-| **Popup/Sidepanel** | **Content Script** | `TabRPCClient`     | `ContentRPCHost`    | Targets a specific tab.                             |
-
-> **Note**: Direct communication from Popup/Sidepanel to Background using `RuntimeRPCClient` is currently not supported by `BackgroundRPCHost` as it requires a sender tab ID.
-
-## Usage
-
-### 1. Define API
-
-Define your service interface and create an identifier.
+### 1. Define Service
 
 ```typescript
 import { createIdentifier } from 'crx-rpc'
@@ -73,13 +44,10 @@ export interface IMathService {
 export const IMathService = createIdentifier<IMathService>('math-service', 'background')
 ```
 
-### 2. Implement & Host Service
-
-#### In Background
+### 2. Host Service (Background or Content)
 
 ```typescript
-// background.ts
-import { BackgroundRPCHost } from 'crx-rpc'
+import { createHost } from 'crx-rpc'
 import { IMathService } from './api'
 
 class MathService implements IMathService {
@@ -88,85 +56,95 @@ class MathService implements IMathService {
   }
 }
 
-const host = new BackgroundRPCHost()
+// Automatically detects environment (background/content)
+// In content script, automatically forwards web messages to background
+const host = createHost()
 host.register(IMathService, new MathService())
 ```
 
-#### In Content Script
+### 3. Call Service (From Anywhere)
 
 ```typescript
-// content.ts
-import { ContentRPCHost, createIdentifier } from 'crx-rpc'
+import { createClient } from 'crx-rpc'
+import { IMathService } from './api'
 
-export interface IPageService {
-  doSomething(): void
+// Automatically detects environment (runtime/web)
+const client = createClient()
+
+// Call background service
+const mathService = await client.createRPCService(IMathService)
+const result = await mathService.add(1, 2) // 3
+
+// Call content service (provide tabId)
+const contentService = await client.createRPCService(IContentService, { tabId: 123 })
+await contentService.doSomething()
+```
+
+### Key Improvements
+
+- **No manual environment detection**: `createHost()` and `createClient()` automatically detect the environment
+- **No manual proxy setup**: Content scripts automatically forward web messages
+- **Smart routing**: Web messages to content services are handled locally, only background-bound messages are forwarded
+- **Unified context injection**: Both background and content services receive `RpcContext` as the last parameter
+- **Single client API**: No need to choose between `RuntimeRPCClient`, `WebRPCClient`, or `TabRPCClient`
+
+## Features
+
+- **Type-safe**: Built with TypeScript.
+- **Flexible**: Supports various communication paths within a Chrome Extension.
+- **Observable**: Supports RxJS-like observables for real-time updates.
+
+## Communication Architecture
+
+The library facilitates communication between different parts of a Chrome Extension.
+
+### Service Providers
+
+Services can be hosted in two locations:
+
+1.  **Background**: Hosted in the background service worker. Handles requests from Content Scripts, Popup/Sidepanel, and Web Pages.
+2.  **Content Script**: Hosted in the content script. Handles requests from Background and Popup/Sidepanel.
+
+### Supported Communication Flows
+
+With the unified API, all communication flows are automatically handled:
+
+| Caller              | Target             | Usage                                           |
+| :------------------ | :----------------- | :---------------------------------------------- |
+| **Content Script**  | **Background**     | `client.createRPCService(IBackgroundService)`   |
+| **Web Page**        | **Background**     | `client.createRPCService(IBackgroundService)`   |
+| **Popup/Sidepanel** | **Background**     | `client.createRPCService(IBackgroundService)`   |
+| **Background**      | **Content Script** | `client.createRPCService(IContentService, { tabId })` |
+| **Popup/Sidepanel** | **Content Script** | `client.createRPCService(IContentService, { tabId })` |
+| **Web Page**        | **Content Script** | `client.createRPCService(IContentService)` (local) |
+
+> **Note**: Web-to-background communication is automatically relayed through the content script. Messages to content services are handled locally if the service is registered in the same content script.
+
+## RpcContext
+
+Both `BackgroundRPCHost` and `ContentRPCHost` (with unified API) automatically inject an `RpcContext` object as the last parameter to service methods:
+
+```typescript
+import { RpcContext } from 'crx-rpc'
+
+class MathService implements IMathService {
+  async add(a: number, b: number, context: RpcContext) {
+    console.log('Called from tab:', context.tabId)
+    console.log('Sender:', context.sender)
+    console.log('Is from runtime context:', context.isFromRuntime)
+    return a + b
+  }
 }
-export const IPageService = createIdentifier<IPageService>('page-service', 'content')
-
-const host = new ContentRPCHost()
-host.register(IPageService, new PageService())
 ```
 
-### 3. Call Service
-
-#### From Content Script (to Background)
-
-```typescript
-import { RuntimeRPCClient } from 'crx-rpc'
-import { IMathService } from './api'
-
-const client = new RuntimeRPCClient()
-const mathService = await client.createRPCService(IMathService)
-
-await mathService.add(1, 2)
-```
-
-#### From Web Page (to Background)
-
-```typescript
-import { WebRPCClient } from 'crx-rpc'
-import { IMathService } from './api'
-
-const client = new WebRPCClient()
-const mathService = await client.createRPCService(IMathService)
-
-await mathService.add(1, 2)
-```
-
-_Note: Requires `Web2BackgroundProxy` to be active in the content script._
-
-```typescript
-// content.ts
-import { Web2BackgroundProxy } from 'crx-rpc'
-const proxy = new Web2BackgroundProxy()
-```
-
-#### From Background/Popup (to Content)
-
-```typescript
-import { TabRPCClient } from 'crx-rpc'
-import { IPageService } from './api'
-
-const tabId = 123 // Target Tab ID
-const client = new TabRPCClient(tabId)
-const pageService = await client.createRPCService(IPageService)
-
-await pageService.doSomething()
-```
+The `RpcContext` includes:
+- `tabId`: The tab ID of the caller (undefined for popup/sidepanel)
+- `sender`: Full Chrome MessageSender object
+- `isFromRuntime`: Boolean indicating if the call is from a runtime context (popup/sidepanel) rather than a content script
 
 ## API Reference
 
-### Hosts
-
-- `BackgroundRPCHost`: Handles RPC requests in the background script.
-- `ContentRPCHost`: Handles RPC requests in the content script.
-
-### Clients
-
-- `RuntimeRPCClient`: Used in Content Scripts to call Background services.
-- `WebRPCClient`: Used in Web Pages to call Background services (via relay).
-- `TabRPCClient`: Used in Background/Popup to call Content Script services for a specific tab.
-
-### Proxies
-
-- `Web2BackgroundProxy`: Relays messages from Web Page to Background. Must be instantiated in the Content Script.
+- `createHost(log?: boolean)`: Creates a unified RPC host that auto-detects environment
+- `UnifiedRPCHost`: Unified host class with automatic environment detection and smart web forwarding
+- `createClient()`: Creates a unified RPC client that auto-detects environment
+- `UnifiedRPCClient`: Unified client class with automatic environment detection and dynamic tabId support
