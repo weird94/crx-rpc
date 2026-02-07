@@ -24,13 +24,13 @@ yarn add crx-rpc
 
 ## Features
 
-- **Type-safe**: Built with TypeScript.
+- **Type-safe**: Built with TypeScript for full type safety and IntelliSense support.
 - **Flexible**: Supports various communication paths within a Chrome Extension.
 - **Observable**: Supports RxJS-like observables for real-time updates.
-- **Unified API**: Simplified host and client APIs with automatic environment detection.
-- **Smart Forwarding**: Automatic web-to-background message relay in content scripts.
+- **Automatic Environment Detection**: Host and client APIs automatically detect the environment (background/content/web).
+- **Smart Message Forwarding**: Content scripts automatically relay web-to-background messages.
 
-## Quick Start (Unified API)
+## Quick Start
 
 ### 1. Define Service
 
@@ -80,20 +80,6 @@ const contentService = await client.createRPCService(IContentService, { tabId: 1
 await contentService.doSomething()
 ```
 
-### Key Improvements
-
-- **No manual environment detection**: `createHost()` and `createClient()` automatically detect the environment
-- **No manual proxy setup**: Content scripts automatically forward web messages
-- **Smart routing**: Web messages to content services are handled locally, only background-bound messages are forwarded
-- **Unified context injection**: Both background and content services receive `RpcContext` as the last parameter
-- **Single client API**: No need to choose between `RuntimeRPCClient`, `WebRPCClient`, or `TabRPCClient`
-
-## Features
-
-- **Type-safe**: Built with TypeScript.
-- **Flexible**: Supports various communication paths within a Chrome Extension.
-- **Observable**: Supports RxJS-like observables for real-time updates.
-
 ## Communication Architecture
 
 The library facilitates communication between different parts of a Chrome Extension.
@@ -107,8 +93,6 @@ Services can be hosted in two locations:
 
 ### Supported Communication Flows
 
-With the unified API, all communication flows are automatically handled:
-
 | Caller              | Target             | Usage                                           |
 | :------------------ | :----------------- | :---------------------------------------------- |
 | **Content Script**  | **Background**     | `client.createRPCService(IBackgroundService)`   |
@@ -118,11 +102,11 @@ With the unified API, all communication flows are automatically handled:
 | **Popup/Sidepanel** | **Content Script** | `client.createRPCService(IContentService, { tabId })` |
 | **Web Page**        | **Content Script** | `client.createRPCService(IContentService)` (local) |
 
-> **Note**: Web-to-background communication is automatically relayed through the content script. Messages to content services are handled locally if the service is registered in the same content script.
+> **Note**: Messages from web pages to background services are automatically relayed through content scripts. Messages to content services are handled locally when called from the same web page.
 
 ## RpcContext
 
-Both `BackgroundRPCHost` and `ContentRPCHost` (with unified API) automatically inject an `RpcContext` object as the last parameter to service methods:
+Service methods automatically receive an `RpcContext` object as the last parameter, providing information about the caller:
 
 ```typescript
 import { RpcContext } from 'crx-rpc'
@@ -144,7 +128,13 @@ The `RpcContext` includes:
 
 ## API Reference
 
-- `createHost(log?: boolean)`: Creates a unified RPC host that auto-detects environment
-- `UnifiedRPCHost`: Unified host class with automatic environment detection and smart web forwarding
-- `createClient()`: Creates a unified RPC client that auto-detects environment
-- `UnifiedRPCClient`: Unified client class with automatic environment detection and dynamic tabId support
+### Core Functions
+
+- `createIdentifier<T>(name: string, target: 'background' | 'content')`: Creates a service identifier with type information
+- `createHost(log?: boolean)`: Creates an RPC host for registering and exposing services
+- `createClient()`: Creates an RPC client for calling remote services
+
+### Classes
+
+- `UnifiedRPCHost`: Host class with automatic environment detection and message forwarding
+- `UnifiedRPCClient`: Client class with automatic environment detection and dynamic routing
