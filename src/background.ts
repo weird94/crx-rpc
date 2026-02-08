@@ -8,6 +8,7 @@ import {
   UNSUBSCRIBE_OBSERVABLE,
 } from './const'
 import { Disposable } from './disposable'
+import { toRpcErrorLike } from './error'
 import type { Identifier } from './id'
 import type {
   RpcContext,
@@ -178,6 +179,7 @@ export class BackgroundRPCHost extends Disposable {
           })
         })
         .catch(err => {
+          const rpcError = toRpcErrorLike(err)
           if (this.log) {
             console.error(
               `%c RPC %c Error: %c ${service} %c.%c ${method} %c [%c ${id} %c]`,
@@ -190,7 +192,7 @@ export class BackgroundRPCHost extends Disposable {
               'background: #2563eb; color: white; font-weight: bold; padding: 1px 4px; border-radius: 2px;', // id 蓝色背景
               'color: #6b7280; font-weight: 500;', // ]
               {
-                error: err.message,
+                error: rpcError.message,
                 timestamp: new Date().toISOString(),
               }
             )
@@ -200,9 +202,9 @@ export class BackgroundRPCHost extends Disposable {
           sendResponse({
             id,
             error: {
-              message: err.message,
-              stack: err.stack,
-              name: err.name,
+              message: rpcError.message,
+              stack: rpcError.stack,
+              name: rpcError.name,
             },
             service,
             method,
