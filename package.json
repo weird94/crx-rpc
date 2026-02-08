@@ -21,6 +21,7 @@
     "build": "tsc",
     "watch": "tsc -w",
     "clean": "rm -rf dist",
+    "lint": "eslint \"src/**/*.ts\" --max-warnings=0",
     "postinstall": "tsc",
     "typecheck": "tsc --noEmit"
   },
