@@ -11,7 +11,6 @@ import { Disposable } from './disposable'
 import { toRpcErrorLike } from './error'
 import type { Identifier } from './id'
 import type {
-  RpcContext,
   RpcObservableSubscribeMessage,
   RpcObservableUpdateMessage,
   RpcRequest,
@@ -144,15 +143,8 @@ export class BackgroundRPCHost extends Disposable {
         return true
       }
 
-      // 构建 RPC 上下文，自动注入到 service 方法的最后一个参数
-      const rpcContext: RpcContext = {
-        tabId,
-        sender,
-        isFromRuntime,
-      }
-
       Promise.resolve()
-        .then(() => serviceInstance[method](...args, rpcContext))
+        .then(() => serviceInstance[method](...args))
         .then(result => {
           if (this.log) {
             console.log(
