@@ -1,4 +1,3 @@
-import type { Identifier } from './id'
 import {
   OBSERVABLE_EVENT,
   RPC_EVENT_NAME,
@@ -8,16 +7,17 @@ import {
   SUBSCRIBABLE_OBSERVABLE,
   UNSUBSCRIBE_OBSERVABLE,
 } from './const'
+import { Disposable } from './disposable'
+import type { Identifier } from './id'
 import type {
   RpcContext,
+  RpcObservableSubscribeMessage,
+  RpcObservableUpdateMessage,
   RpcRequest,
   RpcResponse,
   RpcService,
   SubjectLike,
-  RpcObservableUpdateMessage,
-  RpcObservableSubscribeMessage,
 } from './types'
-import { Disposable } from './disposable'
 
 export class BackgroundRPCHost extends Disposable {
   private services: Record<string, RpcService> = {}
@@ -289,6 +289,9 @@ export class RemoteSubjectManager extends Disposable {
       if (msg.type === SUBSCRIBABLE_OBSERVABLE) {
         const { key } = msg
         this.handleSubscription(key)
+      } else if (msg.type === UNSUBSCRIBE_OBSERVABLE) {
+        const { key } = msg
+        this.removeSubject(key)
       }
     }
 
