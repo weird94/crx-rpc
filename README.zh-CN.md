@@ -24,13 +24,13 @@ yarn add crx-rpc
 
 ## 特性
 
-- **类型安全**: 基于 TypeScript 构建。
+- **类型安全**: 基于 TypeScript 构建，提供完整的类型安全和 IntelliSense 支持。
 - **灵活**: 支持 Chrome 扩展内的多种通信路径。
 - **Observable**: 支持类似 RxJS 的 observable 以进行实时更新。
-- **统一 API**: 简化的 host 和 client API，自动环境检测。
-- **智能转发**: Content script 自动转发 web 消息到 background。
+- **自动环境检测**: Host 和 client API 自动检测环境（background/content/web）。
+- **智能消息转发**: Content script 自动转发 web 到 background 的消息。
 
-## 快速开始（统一 API）
+## 快速开始
 
 ### 1. 定义服务
 
@@ -80,20 +80,6 @@ const contentService = await client.createRPCService(IContentService, { tabId: 1
 await contentService.doSomething()
 ```
 
-### 主要改进
-
-- **无需手动环境检测**: `createHost()` 和 `createClient()` 自动检测环境
-- **无需手动设置代理**: Content script 自动转发 web 消息
-- **智能路由**: 发往 content service 的 web 消息在本地处理，只有发往 background 的消息才转发
-- **统一上下文注入**: Background 和 content service 都会接收 `RpcContext` 作为最后一个参数
-- **单一 client API**: 无需在 `RuntimeRPCClient`、`WebRPCClient` 或 `TabRPCClient` 之间选择
-
-## 特性
-
-- **类型安全**: 基于 TypeScript 构建。
-- **灵活**: 支持 Chrome 扩展内的多种通信路径。
-- **Observable**: 支持类似 RxJS 的 observable 以进行实时更新。
-
 ## 通信架构
 
 本库促进了 Chrome 扩展不同部分之间的通信。
@@ -107,8 +93,6 @@ await contentService.doSomething()
 
 ### 支持的通信流程
 
-使用统一 API，所有通信流程都自动处理：
-
 | 调用方              | 目标               | 用法                                            |
 | :------------------ | :----------------- | :---------------------------------------------- |
 | **Content Script**  | **Background**     | `client.createRPCService(IBackgroundService)`   |
@@ -118,11 +102,11 @@ await contentService.doSomething()
 | **Popup/Sidepanel** | **Content Script** | `client.createRPCService(IContentService, { tabId })` |
 | **Web Page**        | **Content Script** | `client.createRPCService(IContentService)` (本地) |
 
-> **注意**: Web 到 background 的通信会自动通过 content script 中继。发往 content service 的消息如果在同一个 content script 中注册了服务则本地处理。
+> **注意**: 从 web 页面到 background 服务的消息会自动通过 content script 转发。从 web 页面到 content 服务的消息在同一页面上下文中本地处理。
 
 ## RpcContext
 
-`BackgroundRPCHost` 和 `ContentRPCHost`（使用统一 API 时）都会自动将 `RpcContext` 对象作为最后一个参数注入到服务方法中：
+服务方法会自动接收 `RpcContext` 对象作为最后一个参数，提供调用者的相关信息：
 
 ```typescript
 import { RpcContext } from 'crx-rpc'
@@ -144,7 +128,13 @@ class MathService implements IMathService {
 
 ## API 参考
 
-- `createHost(log?: boolean)`: 创建自动检测环境的统一 RPC host
-- `UnifiedRPCHost`: 统一 host 类，自动环境检测和智能 web 转发
-- `createClient()`: 创建自动检测环境的统一 RPC client
-- `UnifiedRPCClient`: 统一 client 类，自动环境检测和动态 tabId 支持
+### 核心函数
+
+- `createIdentifier<T>(name: string, target: 'background' | 'content')`: 创建带有类型信息的服务标识符
+- `createHost(log?: boolean)`: 创建用于注册和暴露服务的 RPC host
+- `createClient()`: 创建用于调用远程服务的 RPC client
+
+### 类
+
+- `UnifiedRPCHost`: 自动环境检测和消息转发的 host 类
+- `UnifiedRPCClient`: 自动环境检测和动态路由的 client 类
