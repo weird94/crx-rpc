@@ -104,28 +104,6 @@ await contentService.doSomething()
 
 > **注意**: 从 web 页面到 background 服务的消息会自动通过 content script 转发。从 web 页面到 content 服务的消息在同一页面上下文中本地处理。
 
-## RpcContext
-
-服务方法会自动接收 `RpcContext` 对象作为最后一个参数，提供调用者的相关信息：
-
-```typescript
-import { RpcContext } from 'crx-rpc'
-
-class MathService implements IMathService {
-  async add(a: number, b: number, context: RpcContext) {
-    console.log('调用来自 tab:', context.tabId)
-    console.log('发送者:', context.sender)
-    console.log('是否来自 runtime 上下文:', context.isFromRuntime)
-    return a + b
-  }
-}
-```
-
-`RpcContext` 包含：
-- `tabId`: 调用者的 tab ID（popup/sidepanel 为 undefined）
-- `sender`: 完整的 Chrome MessageSender 对象
-- `isFromRuntime`: 布尔值，表示调用是否来自 runtime 上下文（popup/sidepanel）而非 content script
-
 ## API 参考
 
 ### 核心函数

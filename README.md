@@ -104,28 +104,6 @@ Services can be hosted in two locations:
 
 > **Note**: Messages from web pages to background services are automatically relayed through content scripts. Messages from web pages to content services are handled locally within the same page context.
 
-## RpcContext
-
-Service methods automatically receive an `RpcContext` object as the last parameter, providing information about the caller:
-
-```typescript
-import { RpcContext } from 'crx-rpc'
-
-class MathService implements IMathService {
-  async add(a: number, b: number, context: RpcContext) {
-    console.log('Called from tab:', context.tabId)
-    console.log('Sender:', context.sender)
-    console.log('Is from runtime context:', context.isFromRuntime)
-    return a + b
-  }
-}
-```
-
-The `RpcContext` includes:
-- `tabId`: The tab ID of the caller (undefined for popup/sidepanel)
-- `sender`: Full Chrome MessageSender object
-- `isFromRuntime`: Boolean indicating if the call is from a runtime context (popup/sidepanel) rather than a content script
-
 ## API Reference
 
 ### Core Functions
