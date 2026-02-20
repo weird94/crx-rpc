@@ -9,8 +9,9 @@ import {
     UNSUBSCRIBE_OBSERVABLE,
 } from './const'
 import { Disposable } from './disposable'
+import { toRpcErrorLike } from './error'
 import { Identifier } from './id'
-import type { RpcContext, RpcRequest, RpcResponse, RpcService } from './types'
+import type { RpcRequest, RpcResponse, RpcService } from './types'
 
 const WEB_TO_BACKGROUND = [RPC_EVENT_NAME, SUBSCRIBABLE_OBSERVABLE, UNSUBSCRIBE_OBSERVABLE]
 const BACKGROUND_TO_WEB = [RPC_RESPONSE_EVENT_NAME, OBSERVABLE_EVENT, RPC_PONG]
@@ -124,7 +125,7 @@ export class UnifiedRPCHost extends Disposable {
                 }
             }
 
-            this.handleRequest(msg, sender, sendResponse, isFromRuntime, tabId)
+            this.handleRequest(msg, sendResponse, isFromRuntime, tabId)
             return true
         }
 
@@ -163,10 +164,9 @@ export class UnifiedRPCHost extends Disposable {
                     })
             }
 
-            // Content 环境也注入 RpcContext
             const tabId = sender.tab?.id
             const isFromRuntime = !tabId
-            this.handleRequest(msg, sender, sendResponse, isFromRuntime, tabId)
+            this.handleRequest(msg, sendResponse, isFromRuntime, tabId)
         }
 
         const dispose = runtimeChannel.onMessage(handler)
@@ -224,7 +224,6 @@ export class UnifiedRPCHost extends Disposable {
 
     private handleRequest(
         msg: RpcRequest & { type?: string },
-        sender: chrome.runtime.MessageSender,
         sendResponse: (response: Omit<RpcResponse, 'from'>) => void,
         isFromRuntime: boolean,
         tabId?: number
@@ -307,15 +306,8 @@ export class UnifiedRPCHost extends Disposable {
             return
         }
 
-        // 构建 RPC 上下文，自动注入到 service 方法的最后一个参数
-        const rpcContext: RpcContext = {
-            tabId,
-            sender,
-            isFromRuntime,
-        }
-
         Promise.resolve()
-            .then(() => serviceInstance[method](...args, rpcContext))
+            .then(() => serviceInstance[method](...args))
             .then(result => {
                 if (this.log) {
                     console.log(
@@ -342,6 +334,7 @@ export class UnifiedRPCHost extends Disposable {
                 })
             })
             .catch(err => {
+                const rpcError = toRpcErrorLike(err)
                 if (this.log) {
                     console.error(
                         `%c RPC %c Error${envLabel}: %c ${service} %c.%c ${method} %c [%c ${id} %c]`,
@@ -354,7 +347,7 @@ export class UnifiedRPCHost extends Disposable {
                         'background: #2563eb; color: white; font-weight: bold; padding: 1px 4px; border-radius: 2px;',
                         'color: #6b7280; font-weight: 500;',
                         {
-                            error: err.message,
+                            error: rpcError.message,
                             timestamp: new Date().toISOString(),
                         }
                     )
@@ -364,9 +357,9 @@ export class UnifiedRPCHost extends Disposable {
                 sendResponse({
                     id,
                     error: {
-                        message: err.message,
-                        stack: err.stack,
-                        name: err.name,
+                        message: rpcError.message,
+                        stack: rpcError.stack,
+                        name: rpcError.name,
                     },
                     service,
                     method,

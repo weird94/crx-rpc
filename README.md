@@ -80,6 +80,19 @@ const contentService = await client.createRPCService(IContentService, { tabId: 1
 await contentService.doSomething()
 ```
 
+### Key Improvements
+
+- **No manual environment detection**: `createHost()` and `createClient()` automatically detect the environment
+- **No manual proxy setup**: Content scripts automatically forward web messages
+- **Smart routing**: Web messages to content services are handled locally, only background-bound messages are forwarded
+- **Single client API**: No need to choose between `RuntimeRPCClient`, `WebRPCClient`, or `TabRPCClient`
+
+## Features
+
+- **Type-safe**: Built with TypeScript.
+- **Flexible**: Supports various communication paths within a Chrome Extension.
+- **Observable**: Supports RxJS-like observables for real-time updates.
+
 ## Communication Architecture
 
 The library facilitates communication between different parts of a Chrome Extension.
@@ -102,17 +115,62 @@ Services can be hosted in two locations:
 | **Popup/Sidepanel** | **Content Script** | `client.createRPCService(IContentService, { tabId })` |
 | **Web Page**        | **Content Script** | `client.createRPCService(IContentService)` (local) |
 
-> **Note**: Messages from web pages to background services are automatically relayed through content scripts. Messages from web pages to content services are handled locally within the same page context.
+> **Note**: Web-to-background communication is automatically relayed through the content script. Messages to content services are handled locally if the service is registered in the same content script.
+
+## Playwright Runtime
+
+For Node.js + Playwright scenarios, use the dedicated entry:
+
+```typescript
+import { createIdentifier } from 'crx-rpc'
+import { createPlaywrightBridge } from 'crx-rpc/playwright'
+
+interface IBackgroundService {
+  add(a: number, b: number): Promise<number>
+}
+
+interface IContentService {
+  getText(selector: string): Promise<string | null>
+}
+
+const IBackgroundService = createIdentifier<IBackgroundService>('bg-service', 'background')
+const IContentService = createIdentifier<IContentService>('content-service', 'content')
+
+const bridge = createPlaywrightBridge()
+
+const backgroundHost = bridge.createBackgroundHost()
+backgroundHost.register(IBackgroundService, {
+  async add(a, b) {
+    return a + b
+  },
+})
+
+const contentHost = bridge.createContentHost('page-1')
+contentHost.register(IContentService, {
+  async getText(selector) {
+    return selector
+  },
+})
+
+const backgroundClient = bridge.createClient({ from: 'background' })
+const contentService = await backgroundClient.createRPCService(IContentService, {
+  targetId: 'page-1',
+})
+await contentService.getText('#title')
+```
+
+Notes:
+- Content service calls require `targetId` (or `defaultTargetId` when creating client).
+- `from: 'background'` and `from: 'content'` are both supported.
+- Keep RPC args/results serializable across process boundaries.
 
 ## API Reference
 
-### Core Functions
-
-- `createIdentifier<T>(name: string, target: 'background' | 'content')`: Creates a service identifier with type information
-- `createHost(log?: boolean)`: Creates an RPC host for registering and exposing services
-- `createClient()`: Creates an RPC client for calling remote services
-
-### Classes
-
-- `UnifiedRPCHost`: Host class with automatic environment detection and message forwarding
-- `UnifiedRPCClient`: Client class with automatic environment detection and dynamic routing
+- `createHost(log?: boolean)`: Creates a unified RPC host that auto-detects environment
+- `UnifiedRPCHost`: Unified host class with automatic environment detection and smart web forwarding
+- `createClient()`: Creates a unified RPC client that auto-detects environment
+- `UnifiedRPCClient`: Unified client class with automatic environment detection and dynamic tabId support
+- `createPlaywrightBridge()`: Creates a Playwright RPC bridge for background/content mutual calls
+- `PlaywrightRPCBridge#createBackgroundHost(log?: boolean)`: Creates a background host in Node runtime
+- `PlaywrightRPCBridge#createContentHost(targetId, log?: boolean)`: Creates a content host bound to a target
+- `PlaywrightRPCBridge#createClient(options)`: Creates a client with `{ from, defaultTargetId? }`

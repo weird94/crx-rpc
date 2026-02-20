@@ -1,4 +1,3 @@
-import type { Identifier } from './id'
 import {
   OBSERVABLE_EVENT,
   RPC_EVENT_NAME,
@@ -8,16 +7,17 @@ import {
   SUBSCRIBABLE_OBSERVABLE,
   UNSUBSCRIBE_OBSERVABLE,
 } from './const'
+import { Disposable } from './disposable'
+import { toRpcErrorLike } from './error'
+import type { Identifier } from './id'
 import type {
-  RpcContext,
+  RpcObservableSubscribeMessage,
+  RpcObservableUpdateMessage,
   RpcRequest,
   RpcResponse,
   RpcService,
   SubjectLike,
-  RpcObservableUpdateMessage,
-  RpcObservableSubscribeMessage,
 } from './types'
-import { Disposable } from './disposable'
 
 export class BackgroundRPCHost extends Disposable {
   private services: Record<string, RpcService> = {}
@@ -143,15 +143,8 @@ export class BackgroundRPCHost extends Disposable {
         return true
       }
 
-      // 构建 RPC 上下文，自动注入到 service 方法的最后一个参数
-      const rpcContext: RpcContext = {
-        tabId,
-        sender,
-        isFromRuntime,
-      }
-
       Promise.resolve()
-        .then(() => serviceInstance[method](...args, rpcContext))
+        .then(() => serviceInstance[method](...args))
         .then(result => {
           if (this.log) {
             console.log(
@@ -178,6 +171,7 @@ export class BackgroundRPCHost extends Disposable {
           })
         })
         .catch(err => {
+          const rpcError = toRpcErrorLike(err)
           if (this.log) {
             console.error(
               `%c RPC %c Error: %c ${service} %c.%c ${method} %c [%c ${id} %c]`,
@@ -190,7 +184,7 @@ export class BackgroundRPCHost extends Disposable {
               'background: #2563eb; color: white; font-weight: bold; padding: 1px 4px; border-radius: 2px;', // id 蓝色背景
               'color: #6b7280; font-weight: 500;', // ]
               {
-                error: err.message,
+                error: rpcError.message,
                 timestamp: new Date().toISOString(),
               }
             )
@@ -200,9 +194,9 @@ export class BackgroundRPCHost extends Disposable {
           sendResponse({
             id,
             error: {
-              message: err.message,
-              stack: err.stack,
-              name: err.name,
+              message: rpcError.message,
+              stack: rpcError.stack,
+              name: rpcError.name,
             },
             service,
             method,
@@ -289,6 +283,9 @@ export class RemoteSubjectManager extends Disposable {
       if (msg.type === SUBSCRIBABLE_OBSERVABLE) {
         const { key } = msg
         this.handleSubscription(key)
+      } else if (msg.type === UNSUBSCRIBE_OBSERVABLE) {
+        const { key } = msg
+        this.removeSubject(key)
       }
     }
 

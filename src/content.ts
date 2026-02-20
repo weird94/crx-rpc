@@ -9,8 +9,9 @@ import {
   UNSUBSCRIBE_OBSERVABLE,
 } from './const'
 import { Disposable } from './disposable'
+import { toRpcErrorLike } from './error'
 import { Identifier } from './id'
-import type { RpcRequest, RpcResponse, RpcService, RpcContext } from './types'
+import type { RpcRequest, RpcResponse, RpcService } from './types'
 
 const WEB_TO_BACKGROUND = [RPC_EVENT_NAME, SUBSCRIBABLE_OBSERVABLE, UNSUBSCRIBE_OBSERVABLE]
 const BACKGROUND_TO_WEB = [RPC_RESPONSE_EVENT_NAME, OBSERVABLE_EVENT, RPC_PONG]
@@ -162,15 +163,7 @@ export class ContentRPCHost extends Disposable {
       }
 
       Promise.resolve()
-        .then(() => {
-          // 构建 RPC 上下文，自动注入到 service 方法的最后一个参数
-          const rpcContext: RpcContext = {
-            tabId: sender.tab?.id,
-            sender,
-            isFromRuntime: !sender.tab?.id,
-          }
-          return (serviceInstance as RpcService)[method](...args, rpcContext)
-        })
+        .then(() => (serviceInstance as RpcService)[method](...args))
         .then(result => {
           if (this.log) {
             console.log(
@@ -197,6 +190,7 @@ export class ContentRPCHost extends Disposable {
           })
         })
         .catch(err => {
+          const rpcError = toRpcErrorLike(err)
           if (this.log) {
             console.error(
               `%c RPC %c Error (tab): %c ${service} %c.%c ${method} %c [%c ${id} %c]`,
@@ -209,7 +203,7 @@ export class ContentRPCHost extends Disposable {
               'background: #2563eb; color: white; font-weight: bold; padding: 1px 4px; border-radius: 2px;',
               'color: #6b7280; font-weight: 500;',
               {
-                error: err?.message,
+                error: rpcError.message,
                 timestamp: new Date().toISOString(),
               }
             )
@@ -219,9 +213,9 @@ export class ContentRPCHost extends Disposable {
           sendResponse({
             id,
             error: {
-              message: err?.message ?? 'Unknown error',
-              stack: err?.stack,
-              name: err?.name,
+              message: rpcError.message,
+              stack: rpcError.stack,
+              name: rpcError.name,
             },
             service,
             method,

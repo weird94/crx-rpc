@@ -31,7 +31,13 @@ type ServiceProxy<T> = {
 }
 
 export class RPCClient extends Disposable {
-  private pending: Map<string, { resolve: Function; reject: Function }> = new Map()
+  private pending: Map<
+    string,
+    {
+      resolve: (value: any) => void
+      reject: (reason?: any) => void
+    }
+  > = new Map()
 
   constructor(
     private messageAdapter: IMessageAdapter,
