@@ -24,13 +24,13 @@ yarn add crx-rpc
 
 ## Features
 
-- **Type-safe**: Built with TypeScript.
+- **Type-safe**: Built with TypeScript for full type safety and IntelliSense support.
 - **Flexible**: Supports various communication paths within a Chrome Extension.
 - **Observable**: Supports RxJS-like observables for real-time updates.
-- **Unified API**: Simplified host and client APIs with automatic environment detection.
-- **Smart Forwarding**: Automatic web-to-background message relay in content scripts.
+- **Automatic Environment Detection**: Host and client APIs automatically detect the environment (background/content/web).
+- **Smart Message Forwarding**: Content scripts automatically relay web-to-background messages.
 
-## Quick Start (Unified API)
+## Quick Start
 
 ### 1. Define Service
 
@@ -106,8 +106,6 @@ Services can be hosted in two locations:
 
 ### Supported Communication Flows
 
-With the unified API, all communication flows are automatically handled:
-
 | Caller              | Target             | Usage                                           |
 | :------------------ | :----------------- | :---------------------------------------------- |
 | **Content Script**  | **Background**     | `client.createRPCService(IBackgroundService)`   |
@@ -119,7 +117,7 @@ With the unified API, all communication flows are automatically handled:
 
 > **Note**: Web-to-background communication is automatically relayed through the content script. Messages to content services are handled locally if the service is registered in the same content script.
 
-## Playwright Runtime (New Entry)
+## Playwright Runtime
 
 For Node.js + Playwright scenarios, use the dedicated entry:
 

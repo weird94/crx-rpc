@@ -24,13 +24,12 @@ yarn add crx-rpc
 
 ## 特性
 
-- **类型安全**: 基于 TypeScript 构建。
+- **类型安全**: 基于 TypeScript 构建，提供完整的类型安全和 IntelliSense 支持。
 - **灵活**: 支持 Chrome 扩展内的多种通信路径。
-- **Observable**: 支持类似 RxJS 的 observable 以进行实时更新。
-- **统一 API**: 简化的 host 和 client API，自动环境检测。
-- **智能转发**: Content script 自动转发 web 消息到 background。
+- **自动环境检测**: Host 和 client API 自动检测环境（background/content/web）。
+- **智能消息转发**: Content script 自动转发 web 到 background 的消息。
 
-## 快速开始（统一 API）
+## 快速开始
 
 ### 1. 定义服务
 
@@ -106,8 +105,6 @@ await contentService.doSomething()
 
 ### 支持的通信流程
 
-使用统一 API，所有通信流程都自动处理：
-
 | 调用方              | 目标               | 用法                                            |
 | :------------------ | :----------------- | :---------------------------------------------- |
 | **Content Script**  | **Background**     | `client.createRPCService(IBackgroundService)`   |
@@ -119,7 +116,7 @@ await contentService.doSomething()
 
 > **注意**: Web 到 background 的通信会自动通过 content script 中继。发往 content service 的消息如果在同一个 content script 中注册了服务则本地处理。
 
-## Playwright Runtime（新入口）
+## Playwright Runtime
 
 在 Node.js + Playwright 场景下，使用独立入口：
 
