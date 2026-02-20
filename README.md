@@ -85,7 +85,6 @@ await contentService.doSomething()
 - **No manual environment detection**: `createHost()` and `createClient()` automatically detect the environment
 - **No manual proxy setup**: Content scripts automatically forward web messages
 - **Smart routing**: Web messages to content services are handled locally, only background-bound messages are forwarded
-- **Unified context injection**: Both background and content services receive `RpcContext` as the last parameter
 - **Single client API**: No need to choose between `RuntimeRPCClient`, `WebRPCClient`, or `TabRPCClient`
 
 ## Features
@@ -120,27 +119,52 @@ With the unified API, all communication flows are automatically handled:
 
 > **Note**: Web-to-background communication is automatically relayed through the content script. Messages to content services are handled locally if the service is registered in the same content script.
 
-## RpcContext
+## Playwright Runtime (New Entry)
 
-Both `BackgroundRPCHost` and `ContentRPCHost` (with unified API) automatically inject an `RpcContext` object as the last parameter to service methods:
+For Node.js + Playwright scenarios, use the dedicated entry:
 
 ```typescript
-import { RpcContext } from 'crx-rpc'
+import { createIdentifier } from 'crx-rpc'
+import { createPlaywrightBridge } from 'crx-rpc/playwright'
 
-class MathService implements IMathService {
-  async add(a: number, b: number, context: RpcContext) {
-    console.log('Called from tab:', context.tabId)
-    console.log('Sender:', context.sender)
-    console.log('Is from runtime context:', context.isFromRuntime)
-    return a + b
-  }
+interface IBackgroundService {
+  add(a: number, b: number): Promise<number>
 }
+
+interface IContentService {
+  getText(selector: string): Promise<string | null>
+}
+
+const IBackgroundService = createIdentifier<IBackgroundService>('bg-service', 'background')
+const IContentService = createIdentifier<IContentService>('content-service', 'content')
+
+const bridge = createPlaywrightBridge()
+
+const backgroundHost = bridge.createBackgroundHost()
+backgroundHost.register(IBackgroundService, {
+  async add(a, b) {
+    return a + b
+  },
+})
+
+const contentHost = bridge.createContentHost('page-1')
+contentHost.register(IContentService, {
+  async getText(selector) {
+    return selector
+  },
+})
+
+const backgroundClient = bridge.createClient({ from: 'background' })
+const contentService = await backgroundClient.createRPCService(IContentService, {
+  targetId: 'page-1',
+})
+await contentService.getText('#title')
 ```
 
-The `RpcContext` includes:
-- `tabId`: The tab ID of the caller (undefined for popup/sidepanel)
-- `sender`: Full Chrome MessageSender object
-- `isFromRuntime`: Boolean indicating if the call is from a runtime context (popup/sidepanel) rather than a content script
+Notes:
+- Content service calls require `targetId` (or `defaultTargetId` when creating client).
+- `from: 'background'` and `from: 'content'` are both supported.
+- Keep RPC args/results serializable across process boundaries.
 
 ## API Reference
 
@@ -148,3 +172,7 @@ The `RpcContext` includes:
 - `UnifiedRPCHost`: Unified host class with automatic environment detection and smart web forwarding
 - `createClient()`: Creates a unified RPC client that auto-detects environment
 - `UnifiedRPCClient`: Unified client class with automatic environment detection and dynamic tabId support
+- `createPlaywrightBridge()`: Creates a Playwright RPC bridge for background/content mutual calls
+- `PlaywrightRPCBridge#createBackgroundHost(log?: boolean)`: Creates a background host in Node runtime
+- `PlaywrightRPCBridge#createContentHost(targetId, log?: boolean)`: Creates a content host bound to a target
+- `PlaywrightRPCBridge#createClient(options)`: Creates a client with `{ from, defaultTargetId? }`

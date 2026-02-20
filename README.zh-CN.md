@@ -85,7 +85,6 @@ await contentService.doSomething()
 - **无需手动环境检测**: `createHost()` 和 `createClient()` 自动检测环境
 - **无需手动设置代理**: Content script 自动转发 web 消息
 - **智能路由**: 发往 content service 的 web 消息在本地处理，只有发往 background 的消息才转发
-- **统一上下文注入**: Background 和 content service 都会接收 `RpcContext` 作为最后一个参数
 - **单一 client API**: 无需在 `RuntimeRPCClient`、`WebRPCClient` 或 `TabRPCClient` 之间选择
 
 ## 特性
@@ -120,27 +119,52 @@ await contentService.doSomething()
 
 > **注意**: Web 到 background 的通信会自动通过 content script 中继。发往 content service 的消息如果在同一个 content script 中注册了服务则本地处理。
 
-## RpcContext
+## Playwright Runtime（新入口）
 
-`BackgroundRPCHost` 和 `ContentRPCHost`（使用统一 API 时）都会自动将 `RpcContext` 对象作为最后一个参数注入到服务方法中：
+在 Node.js + Playwright 场景下，使用独立入口：
 
 ```typescript
-import { RpcContext } from 'crx-rpc'
+import { createIdentifier } from 'crx-rpc'
+import { createPlaywrightBridge } from 'crx-rpc/playwright'
 
-class MathService implements IMathService {
-  async add(a: number, b: number, context: RpcContext) {
-    console.log('调用来自 tab:', context.tabId)
-    console.log('发送者:', context.sender)
-    console.log('是否来自 runtime 上下文:', context.isFromRuntime)
-    return a + b
-  }
+interface IBackgroundService {
+  add(a: number, b: number): Promise<number>
 }
+
+interface IContentService {
+  getText(selector: string): Promise<string | null>
+}
+
+const IBackgroundService = createIdentifier<IBackgroundService>('bg-service', 'background')
+const IContentService = createIdentifier<IContentService>('content-service', 'content')
+
+const bridge = createPlaywrightBridge()
+
+const backgroundHost = bridge.createBackgroundHost()
+backgroundHost.register(IBackgroundService, {
+  async add(a, b) {
+    return a + b
+  },
+})
+
+const contentHost = bridge.createContentHost('page-1')
+contentHost.register(IContentService, {
+  async getText(selector) {
+    return selector
+  },
+})
+
+const backgroundClient = bridge.createClient({ from: 'background' })
+const contentService = await backgroundClient.createRPCService(IContentService, {
+  targetId: 'page-1',
+})
+await contentService.getText('#title')
 ```
 
-`RpcContext` 包含：
-- `tabId`: 调用者的 tab ID（popup/sidepanel 为 undefined）
-- `sender`: 完整的 Chrome MessageSender 对象
-- `isFromRuntime`: 布尔值，表示调用是否来自 runtime 上下文（popup/sidepanel）而非 content script
+说明：
+- 调用 content service 必须提供 `targetId`（或创建 client 时提供 `defaultTargetId`）。
+- 同时支持 `from: 'background'` 和 `from: 'content'` 两种调用方。
+- RPC 参数与返回值应保持可序列化。
 
 ## API 参考
 
@@ -148,3 +172,7 @@ class MathService implements IMathService {
 - `UnifiedRPCHost`: 统一 host 类，自动环境检测和智能 web 转发
 - `createClient()`: 创建自动检测环境的统一 RPC client
 - `UnifiedRPCClient`: 统一 client 类，自动环境检测和动态 tabId 支持
+- `createPlaywrightBridge()`: 创建 Playwright RPC bridge，用于 background/content 互调
+- `PlaywrightRPCBridge#createBackgroundHost(log?: boolean)`: 创建 Node 侧 background host
+- `PlaywrightRPCBridge#createContentHost(targetId, log?: boolean)`: 创建绑定 target 的 content host
+- `PlaywrightRPCBridge#createClient(options)`: 创建 client，参数为 `{ from, defaultTargetId? }`
