@@ -1,5 +1,5 @@
-import { RPC_EVENT_NAME, RPC_PING, RPC_PONG, RPC_RESPONSE_EVENT_NAME } from '../const'
 import { RPCClient } from '../client'
+import { RPC_EVENT_NAME, RPC_PING, RPC_PONG, RPC_RESPONSE_EVENT_NAME } from '../const'
 import { Disposable } from '../disposable'
 import { toRpcErrorLike } from '../error'
 import type { Identifier } from '../id'
@@ -140,7 +140,11 @@ class PlaywrightMessageAdapter implements IMessageAdapter {
 abstract class BasePlaywrightHost extends Disposable {
   protected services: Record<string, RpcService> = {}
 
-  constructor(private hostSide: PlaywrightSide, protected bus: PlaywrightBus, protected log = false) {
+  constructor(
+    private hostSide: PlaywrightSide,
+    protected bus: PlaywrightBus,
+    protected log = false
+  ) {
     super()
   }
 
@@ -237,17 +241,171 @@ export class PlaywrightBackgroundHost extends BasePlaywrightHost {
   }
 }
 
-export class PlaywrightContentHost extends BasePlaywrightHost {
+/**
+ * Playwright Page interface — only the subset we need, so we don't require
+ * the full `@playwright/test` package as a hard dependency.
+ */
+export interface PlaywrightPage {
+  evaluate<R>(fn: string | ((...args: any[]) => R), arg?: any): Promise<R>
+  addInitScript(script: string | { content: string }): Promise<void>
+}
+
+/** The runtime injected into the browser page via page.evaluate / page.addInitScript */
+const BROWSER_RUNTIME_SCRIPT = /* js */ `
+if (!window.__crxRpc) {
+  window.__crxRpc = {
+    _services: {},
+    register: function(key, impl) {
+      this._services[key] = impl;
+    },
+    call: async function(service, method, args) {
+      var svc = this._services[service];
+      if (!svc) return { error: { message: 'Unknown service: ' + service } };
+      if (!(method in svc)) return { error: { message: 'Unknown method: ' + method } };
+      try {
+        var result = await svc[method].apply(svc, args);
+        return { result: result };
+      } catch (e) {
+        return { error: { message: e.message, name: e.name, stack: e.stack } };
+      }
+    }
+  };
+}
+`
+
+/**
+ * Converts a service interface so that methods may return either a plain value
+ * or a Promise — useful when writing sync browser implementations of
+ * Promise-typed interfaces.
+ */
+type SyncImpl<T> = {
+  [K in keyof T]: T[K] extends (...args: infer A) => Promise<infer R>
+    ? (...args: A) => R | Promise<R>
+    : T[K]
+}
+
+/**
+ * A content host that runs registered services **inside the browser page**.
+ * Service implementations have full access to `document`, `window`, etc.
+ *
+ * Usage:
+ * ```ts
+ * const contentHost = await bridge.createContentHost(page, 'tab-1')
+ *
+ * await contentHost.register(IMyService, () => ({
+ *   getText(selector: string) {
+ *     return document.querySelector(selector)?.textContent ?? null
+ *   }
+ * }))
+ * ```
+ *
+ * ⚠️  The factory passed to `register` is serialised with `.toString()`
+ * and executed inside the browser — it cannot close over Node.js variables.
+ */
+export class PlaywrightPageContentHost extends Disposable {
   constructor(
-    bus: PlaywrightBus,
+    private readonly bus: PlaywrightBus,
+    private readonly page: PlaywrightPage,
     readonly targetId: PlaywrightTargetId,
-    log = false
+    private readonly log = false
   ) {
-    super('content', bus, log)
-    const dispose = bus.onContentMessage(targetId, (message, sender) => {
-      this.handleIncomingMessage('content', 'content', message, sender)
-    })
+    super()
+
+    const dispose = bus.onContentMessage(
+      targetId,
+      (rawMessage: RpcRequest & { type?: string }, sender: SenderContext) => {
+        this._handleIncomingMessage(rawMessage, sender)
+      }
+    )
     this.disposeWithMe(dispose)
+  }
+
+  private _handleIncomingMessage(
+    rawMessage: RpcRequest & { type?: string },
+    sender: SenderContext
+  ): void {
+    if (rawMessage.type === RPC_PING) {
+      this.bus.sendToClient(sender.clientId, {
+        type: RPC_PONG,
+        from: 'content',
+      })
+      return
+    }
+
+    if (rawMessage.type !== RPC_EVENT_NAME) return
+    if (rawMessage.to !== 'content') return
+
+    const { id, service, method, args } = rawMessage
+
+    const sendResponse = (response: Omit<RpcResponse, 'from'>) => {
+      this.bus.sendToClient(sender.clientId, {
+        ...response,
+        type: RPC_RESPONSE_EVENT_NAME,
+        from: rawMessage.from,
+      })
+    }
+
+    if (this.log) {
+      console.log(`[crx-rpc/playwright] content host dispatching ${service}.${method} to page`)
+    }
+
+    // Forward the call into the browser page and get a serialisable result back.
+    this.page
+      .evaluate(
+        ({ service, method, args }: { service: string; method: string; args: any[] }) =>
+          (window as any).__crxRpc.call(service, method, args),
+        { service, method, args }
+      )
+      .then(
+        (outcome: { result?: any; error?: { message: string; name?: string; stack?: string } }) => {
+          if (outcome.error) {
+            sendResponse({ id, service, method, error: outcome.error })
+          } else {
+            sendResponse({ id, service, method, result: outcome.result })
+          }
+        }
+      )
+      .catch((err: any) => {
+        const rpcError = toRpcErrorLike(err)
+        sendResponse({
+          id,
+          service,
+          method,
+          error: { message: rpcError.message, name: rpcError.name, stack: rpcError.stack },
+        })
+      })
+  }
+
+  /**
+   * Register a service implementation **inside the browser page**.
+   *
+   * The `factory` function is serialised via `.toString()` and evaluated in
+   * the page context.  It must be self-contained — no closures over Node.js
+   * variables are allowed.
+   *
+   * @example
+   * await contentHost.register(IContentService, () => ({
+   *   getText(selector: string) {
+   *     return document.querySelector(selector)?.textContent ?? null
+   *   }
+   * }))
+   */
+  async register<T>(serviceIdentifier: Identifier<T>, factory: () => SyncImpl<T>): Promise<void> {
+    const key = serviceIdentifier.key
+    const factoryStr = factory.toString()
+
+    await this.page.evaluate(
+      ({ key, factoryStr }: { key: string; factoryStr: string }) => {
+        // eslint-disable-next-line no-new-func
+        const impl = new Function(`return (${factoryStr})`)()()
+        ;(window as any).__crxRpc.register(key, impl)
+      },
+      { key, factoryStr }
+    )
+
+    if (this.log) {
+      console.log(`[crx-rpc/playwright] content host registered service "${key}" in browser page`)
+    }
   }
 }
 
@@ -343,8 +501,23 @@ export class PlaywrightRPCBridge extends Disposable {
     return host
   }
 
-  createContentHost(targetId: PlaywrightTargetId, log = false): PlaywrightContentHost {
-    const host = new PlaywrightContentHost(this.bus, targetId, log)
+  /**
+   * Create a content host backed by a real Playwright browser page.
+   * Services registered via `registerInPage()` run inside the page with
+   * full access to `document`, `window`, etc.
+   *
+   * This method is async because it injects the `window.__crxRpc` runtime
+   * into the page before returning.
+   */
+  async createContentHost(
+    page: PlaywrightPage,
+    targetId: PlaywrightTargetId,
+    log = false
+  ): Promise<PlaywrightPageContentHost> {
+    // Inject the browser-side RPC runtime
+    await page.evaluate(BROWSER_RUNTIME_SCRIPT)
+
+    const host = new PlaywrightPageContentHost(this.bus, page, targetId, log)
     this.disposeWithMe(() => host.dispose())
     return host
   }

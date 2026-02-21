@@ -16,10 +16,7 @@ interface IContentDomService {
   concatWithTitle(prefix: string): Promise<string>
 }
 
-const IContentDomService = createIdentifier<IContentDomService>(
-  'playwright-content-dom',
-  'content'
-)
+const IContentDomService = createIdentifier<IContentDomService>('playwright-content-dom', 'content')
 
 test('background and content can call each other through playwright bridge', async ({ page }) => {
   await page.setContent(`
@@ -32,6 +29,7 @@ test('background and content can call each other through playwright bridge', asy
   const bridge = createPlaywrightBridge()
   const targetId = 'page-1'
 
+  // background host — no change
   const backgroundHost = bridge.createBackgroundHost()
   backgroundHost.register(IBackgroundMathService, {
     async add(a: number, b: number): Promise<number> {
@@ -39,16 +37,17 @@ test('background and content can call each other through playwright bridge', asy
     },
   })
 
-  const contentHost = bridge.createContentHost(targetId)
-  contentHost.register(IContentDomService, {
-    async getText(selector: string): Promise<string | null> {
-      return page.locator(selector).textContent()
+  // content host — service now runs inside the browser page with real DOM access
+  const contentHost = await bridge.createContentHost(page, targetId)
+  await contentHost.register(IContentDomService, () => ({
+    getText(selector: string): string | null {
+      return document.querySelector(selector)?.textContent ?? null
     },
-    async concatWithTitle(prefix: string): Promise<string> {
-      const title = await page.locator('#title').textContent()
-      return `${prefix}:${title ?? ''}`
+    concatWithTitle(prefix: string): string {
+      const title = document.querySelector('#title')?.textContent ?? ''
+      return `${prefix}:${title}`
     },
-  })
+  }))
 
   const backgroundClient = bridge.createClient({ from: 'background' })
   const contentService = await backgroundClient.createRPCService(IContentDomService, { targetId })
