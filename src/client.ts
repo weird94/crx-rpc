@@ -30,6 +30,10 @@ type ServiceProxy<T> = {
     : never
 }
 
+const RPC_READY_TIMEOUT_MS = 300
+const RPC_READY_PING_TIMEOUT_MS = 100
+const RPC_READY_RETRY_INTERVAL_MS = 50
+
 export class RPCClient extends Disposable {
   private pending: Map<
     string,
@@ -80,7 +84,7 @@ export class RPCClient extends Disposable {
     })
   }
 
-  private async waitReady(timeout = 10000): Promise<void> {
+  private async waitReady(timeout = RPC_READY_TIMEOUT_MS): Promise<void> {
     const startTime = Date.now()
     const check = async () => {
       return new Promise<boolean>(resolve => {
@@ -90,7 +94,7 @@ export class RPCClient extends Disposable {
             resolved = true
             resolve(false)
           }
-        }, 1000)
+        }, RPC_READY_PING_TIMEOUT_MS)
 
         const handler = (msg: any) => {
           if (msg.type === RPC_PONG) {
@@ -110,7 +114,7 @@ export class RPCClient extends Disposable {
     while (Date.now() - startTime < timeout) {
       const ready = await check()
       if (ready) return
-      await new Promise(r => setTimeout(r, 500))
+      await new Promise(r => setTimeout(r, RPC_READY_RETRY_INTERVAL_MS))
     }
 
     throw new Error('RPC service not ready (timeout)')
