@@ -117,53 +117,6 @@ Services can be hosted in two locations:
 
 > **Note**: Web-to-background communication is automatically relayed through the content script. Messages to content services are handled locally if the service is registered in the same content script.
 
-## Playwright Runtime
-
-For Node.js + Playwright scenarios, use the dedicated entry:
-
-```typescript
-import { createIdentifier } from 'crx-rpc'
-import { createPlaywrightBridge } from 'crx-rpc/playwright'
-
-interface IBackgroundService {
-  add(a: number, b: number): Promise<number>
-}
-
-interface IContentService {
-  getText(selector: string): Promise<string | null>
-}
-
-const IBackgroundService = createIdentifier<IBackgroundService>('bg-service', 'background')
-const IContentService = createIdentifier<IContentService>('content-service', 'content')
-
-const bridge = createPlaywrightBridge()
-
-const backgroundHost = bridge.createBackgroundHost()
-backgroundHost.register(IBackgroundService, {
-  async add(a, b) {
-    return a + b
-  },
-})
-
-const contentHost = bridge.createContentHost('page-1')
-contentHost.register(IContentService, {
-  async getText(selector) {
-    return selector
-  },
-})
-
-const backgroundClient = bridge.createClient({ from: 'background' })
-const contentService = await backgroundClient.createRPCService(IContentService, {
-  targetId: 'page-1',
-})
-await contentService.getText('#title')
-```
-
-Notes:
-- Content service calls require `targetId` (or `defaultTargetId` when creating client).
-- `from: 'background'` and `from: 'content'` are both supported.
-- Keep RPC args/results serializable across process boundaries.
-
 ## API Reference
 
 - `createHost(log?: boolean)`: Creates a unified RPC host that auto-detects environment
@@ -172,5 +125,6 @@ Notes:
 - `UnifiedRPCClient`: Unified client class with automatic environment detection and dynamic tabId support
 - `createPlaywrightBridge()`: Creates a Playwright RPC bridge for background/content mutual calls
 - `PlaywrightRPCBridge#createBackgroundHost(log?: boolean)`: Creates a background host in Node runtime
-- `PlaywrightRPCBridge#createContentHost(targetId, log?: boolean)`: Creates a content host bound to a target
+- `PlaywrightRPCBridge#createContentHost(page, targetId, log?: boolean)`: Creates a content host bound to a real Playwright page
+- `PlaywrightPageContentHost#register(identifier, factory)`: Registers a content service factory that runs inside the browser page
 - `PlaywrightRPCBridge#createClient(options)`: Creates a client with `{ from, defaultTargetId? }`

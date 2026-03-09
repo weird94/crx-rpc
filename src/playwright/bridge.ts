@@ -503,11 +503,12 @@ export class PlaywrightRPCBridge extends Disposable {
 
   /**
    * Create a content host backed by a real Playwright browser page.
-   * Services registered via `registerInPage()` run inside the page with
+   * Services registered via `register()` run inside the page with
    * full access to `document`, `window`, etc.
    *
    * This method is async because it injects the `window.__crxRpc` runtime
-   * into the page before returning.
+   * into the current document before returning. If the page navigates or
+   * reloads, call `createContentHost()` again and re-register page services.
    */
   async createContentHost(
     page: PlaywrightPage,
