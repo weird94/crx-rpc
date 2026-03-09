@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { TabRPCClient } from '../adapter/tab'
 import { type Identifier } from '../id'
 
@@ -77,18 +77,23 @@ export function useContentRPCService<T>(
         clientRef.current = null
       }
 
-      // 获取当前活动 tab
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-
-      if (!tab.id) {
-        throw new Error('No active tab found')
+      // 如果已知 tabId 则直接使用，跳过 chrome.tabs.query
+      let resolvedTabId: number
+      if (providedTabId != null) {
+        resolvedTabId = providedTabId
+      } else {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+        if (!tab.id) {
+          throw new Error('No active tab found')
+        }
+        resolvedTabId = tab.id
       }
 
-      setTabId(tab.id)
-      currentTabIdRef.current = tab.id
+      setTabId(resolvedTabId)
+      currentTabIdRef.current = resolvedTabId
 
       // 创建 RPC client 和服务
-      const tabClient = new TabRPCClient(tab.id)
+      const tabClient = new TabRPCClient(resolvedTabId)
       clientRef.current = tabClient
 
       const rpcService = await tabClient.createRPCService(serviceIdentifier)
@@ -100,7 +105,7 @@ export function useContentRPCService<T>(
     } finally {
       setIsLoading(false)
     }
-  }, [serviceIdentifier])
+  }, [serviceIdentifier, providedTabId])
 
   const dispose = useCallback(() => {
     if (clientRef.current) {
