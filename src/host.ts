@@ -94,6 +94,11 @@ export class UnifiedRPCHost extends Disposable {
         ) => {
             if (msg.type !== RPC_EVENT_NAME && msg.type !== RPC_PING) return false
 
+            // Immediately ack the native transport layer so Chrome doesn't
+            // report "port closed before a response was received".
+            // The real RPC result travels via a secondary message (RPC_RESPONSE_EVENT_NAME / RPC_PONG).
+            sendResponseCallback({ ok: true })
+
             const tabId = sender.tab?.id
             const isFromRuntime = !tabId // sidepanel/popup 没有 tab id
 
@@ -107,7 +112,7 @@ export class UnifiedRPCHost extends Disposable {
                 } else {
                     chrome.tabs.sendMessage(tabId, pong)
                 }
-                return true
+                return false
             }
 
             // 根据来源选择不同的响应方式
@@ -126,7 +131,7 @@ export class UnifiedRPCHost extends Disposable {
             }
 
             this.handleRequest(msg, sendResponse, isFromRuntime, tabId)
-            return true
+            return false
         }
 
         chrome.runtime.onMessage.addListener(handler)
