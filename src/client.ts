@@ -1,184 +1,208 @@
-import {
-  OBSERVABLE_EVENT,
-  RPC_EVENT_NAME,
-  RPC_PING,
-  RPC_PONG,
-  RPC_RESPONSE_EVENT_NAME,
-  SUBSCRIBABLE_OBSERVABLE,
-  UNSUBSCRIBE_OBSERVABLE,
-} from './const'
+import { RPC_EVENT_NAME, RPC_PING, RPC_PONG, RPC_RESPONSE_EVENT_NAME } from './const'
+import { Disposable } from './disposable'
+import { toRpcErrorLike } from './error'
+import type { Identifier } from './id'
+import { randomId } from './tool'
 import type {
+  IMessageAdapter,
+  RpcErrorPayload,
+  RpcFrom,
+  RpcNativeResponse,
   RpcRequest,
   RpcResponse,
-  RpcObservableUpdateMessage,
-  IMessageAdapter,
   RpcTo,
-  RpcFrom,
+  RpcTransferable,
 } from './types'
-import type { Identifier } from './id'
-import { Disposable } from './disposable'
-import { randomId } from './tool'
 
-// 类型工具：提取函数类型的参数和返回值类型
-type FunctionArgs<T> = T extends (...args: infer A) => any ? A : never
-type FunctionReturnType<T> = T extends (...args: any[]) => infer R ? R : never
+type FunctionArgs<T> = T extends (...args: infer A) => infer _R ? A : never
+type FunctionReturnType<T> = T extends (...args: infer _A) => infer R ? R : never
 
-// 类型工具：将服务接口转换为客户端代理类型
-type ServiceProxy<T> = {
-  [K in keyof T]: T[K] extends (...args: any[]) => any
-    ? (...args: FunctionArgs<T[K]>) => Promise<Awaited<FunctionReturnType<T[K]>>>
+export type ServiceProxy<T> = {
+  [K in keyof T]: T[K] extends (...args: infer A) => infer R
+    ? (...args: A) => Promise<Awaited<R>>
     : never
+}
+
+type PendingRequest = {
+  resolve: (value: RpcTransferable | undefined) => void
+  reject: (reason?: Error) => void
+}
+
+type PongMessage = {
+  type?: string
 }
 
 const RPC_READY_TIMEOUT_MS = 300
 const RPC_READY_PING_TIMEOUT_MS = 100
 const RPC_READY_RETRY_INTERVAL_MS = 50
 
+function toNativeRpcError(error: RpcErrorPayload): Error {
+  const nativeError = new Error(error.message)
+  nativeError.name = error.name || 'RPCError'
+  if (error.stack) {
+    nativeError.stack = error.stack
+  }
+  return nativeError
+}
+
+function fromNativeResponse<TResult extends RpcTransferable>(
+  response: RpcNativeResponse<TResult>
+): Promise<TResult> {
+  if (response.ok) {
+    return Promise.resolve(response.result)
+  }
+  return Promise.reject(toNativeRpcError(response.error))
+}
+
+function fromTransportError(error: Error | object | string): Error {
+  const rpcError = toRpcErrorLike(error)
+  return toNativeRpcError({
+    message: rpcError.message,
+    name: rpcError.name,
+    stack: rpcError.stack,
+  })
+}
+
 export class RPCClient extends Disposable {
-  private pending: Map<
-    string,
-    {
-      resolve: (value: any) => void
-      reject: (reason?: any) => void
-    }
-  > = new Map()
+  private pending: Map<string, PendingRequest> = new Map()
 
   constructor(
-    private messageAdapter: IMessageAdapter,
-    private from: RpcFrom
+    private readonly messageAdapter: IMessageAdapter,
+    private readonly from: RpcFrom
   ) {
     super()
+
+    if (messageAdapter.sendRequest) {
+      return
+    }
+
     this.disposeWithMe(
       messageAdapter.onMessage<RpcResponse>(RPC_RESPONSE_EVENT_NAME, (event: RpcResponse) => {
-        const { id, result, error } = event as RpcResponse
-        const promise = this.pending.get(id)
-        if (!promise) return
+        const { id, result, error } = event
+        const pendingRequest = this.pending.get(id)
+        if (!pendingRequest) {
+          return
+        }
 
         this.pending.delete(id)
 
         if (error) {
-          const err = new Error(error.message)
-          err.name = error.name || 'RPCError'
-          err.stack = error.stack
-          promise.reject(err)
-        } else {
-          promise.resolve(result)
+          pendingRequest.reject(toNativeRpcError(error))
+          return
         }
+
+        pendingRequest.resolve(result)
       })
     )
   }
 
-  call<T = any>(service: string, method: string, to: RpcTo, args: any[]): Promise<T> {
+  call<TResult extends RpcTransferable = RpcTransferable>(
+    service: string,
+    method: string,
+    to: RpcTo,
+    args: RpcTransferable[]
+  ): Promise<TResult> {
     const id = randomId()
-    return new Promise<T>((resolve, reject) => {
-      this.pending.set(id, { resolve, reject })
-      const requestParam: RpcRequest = {
-        method,
-        args,
-        id,
-        service,
-        to,
-        from: this.from,
+    const request: RpcRequest = {
+      method,
+      args,
+      id,
+      service,
+      to,
+      from: this.from,
+    }
+
+    if (this.messageAdapter.sendRequest) {
+      return this.messageAdapter
+        .sendRequest<TResult>(request)
+        .then(response => fromNativeResponse(response))
+        .catch(error =>
+          Promise.reject(fromTransportError(error instanceof Error ? error : String(error)))
+        )
+    }
+
+    return new Promise<TResult>((resolve, reject) => {
+      this.pending.set(id, {
+        resolve: value => {
+          resolve(value as TResult)
+        },
+        reject,
+      })
+
+      try {
+        this.messageAdapter.sendMessage(RPC_EVENT_NAME, request)
+      } catch (error) {
+        this.pending.delete(id)
+        reject(fromTransportError(error instanceof Error ? error : String(error)))
       }
-      this.messageAdapter.sendMessage(RPC_EVENT_NAME, requestParam)
     })
   }
 
   private async waitReady(timeout = RPC_READY_TIMEOUT_MS): Promise<void> {
+    if (this.messageAdapter.sendRequest) {
+      return
+    }
+
     const startTime = Date.now()
     const check = async () => {
       return new Promise<boolean>(resolve => {
-        let resolved = false
+        let settled = false
+
         const timer = setTimeout(() => {
-          if (!resolved) {
-            resolved = true
+          if (!settled) {
+            settled = true
             resolve(false)
           }
         }, RPC_READY_PING_TIMEOUT_MS)
 
-        const handler = (msg: any) => {
-          if (msg.type === RPC_PONG) {
-            if (!resolved) {
-              resolved = true
-              resolve(true)
-            }
-            dispose()
+        const dispose = this.messageAdapter.onMessage<PongMessage>(RPC_PONG, (message: PongMessage) => {
+          if (message.type !== RPC_PONG || settled) {
+            return
           }
-        }
+          settled = true
+          clearTimeout(timer)
+          dispose()
+          resolve(true)
+        })
 
-        const dispose = this.messageAdapter.onMessage(RPC_PONG, handler)
         this.messageAdapter.sendMessage(RPC_PING, { type: RPC_PING })
       })
     }
 
     while (Date.now() - startTime < timeout) {
       const ready = await check()
-      if (ready) return
-      await new Promise(r => setTimeout(r, RPC_READY_RETRY_INTERVAL_MS))
+      if (ready) {
+        return
+      }
+      await new Promise(resolve => setTimeout(resolve, RPC_READY_RETRY_INTERVAL_MS))
     }
 
     throw new Error('RPC service not ready (timeout)')
   }
 
   async createRPCService<T>(serviceIdentifier: Identifier<T>): Promise<ServiceProxy<T>> {
-    const serviceKey = serviceIdentifier.key
-
     await this.waitReady()
 
-    // 创建代理对象，拦截方法调用
-    return new Proxy({} as ServiceProxy<T>, {
-      get: (target, prop: string | symbol) => {
+    const serviceKey = serviceIdentifier.key
+
+    return new Proxy(Object.create(null) as ServiceProxy<T>, {
+      get: (_target, prop: string | symbol) => {
         if (prop === 'then') {
           return undefined
         }
-        if (typeof prop === 'string') {
-          // 返回一个代理函数
-          return (...args: any[]) => {
-            return this.call(serviceKey, prop, serviceIdentifier.to, args)
-          }
+        if (typeof prop !== 'string') {
+          return undefined
         }
-        return (target as any)[prop]
+
+        return (...args: FunctionArgs<T[keyof T]>) => {
+          return this.call(
+            serviceKey,
+            prop,
+            serviceIdentifier.to,
+            args as RpcTransferable[]
+          ) as Promise<Awaited<FunctionReturnType<T[keyof T]>>>
+        }
       },
     })
-  }
-}
-
-export class BaseObservable<T> extends Disposable {
-  private listeners = new Set<(value: T) => void>()
-  private completed = false
-
-  private get _finalKey() {
-    return `${this.identifier.key}-${this.key}`
-  }
-
-  constructor(
-    private identifier: Identifier<T>,
-    private key: string,
-    private _callback: (value: T) => void,
-    private _adapter: IMessageAdapter
-  ) {
-    super()
-    this.disposeWithMe(
-      this._adapter.onMessage(OBSERVABLE_EVENT, (event: any) => {
-        // 支持两种格式：直接消息对象（runtime adapter）或 CustomEvent detail（web adapter）
-        const msg = (event.detail ?? event) as RpcObservableUpdateMessage<T>
-        if (msg.key !== this._finalKey) return
-
-        if (msg.operation === 'next' && !this.completed && msg.value) {
-          this._callback(msg.value)
-        }
-
-        if (msg.operation === 'complete') {
-          this.completed = true
-          this.listeners.clear()
-        }
-      })
-    )
-
-    this._adapter.sendMessage(SUBSCRIBABLE_OBSERVABLE, { key: this._finalKey })
-  }
-
-  unsubscribe(): void {
-    this._adapter.sendMessage(UNSUBSCRIBE_OBSERVABLE, { key: this._finalKey })
   }
 }

@@ -4,7 +4,15 @@ import { Disposable } from '../disposable'
 import { toRpcErrorLike } from '../error'
 import type { Identifier } from '../id'
 import { randomId } from '../tool'
-import type { IMessageAdapter, RpcFrom, RpcRequest, RpcResponse, RpcService, RpcTo } from '../types'
+import type {
+  IMessageAdapter,
+  RpcFrom,
+  RpcRequest,
+  RpcResponse,
+  RpcService,
+  RpcTo,
+  RpcTransferable,
+} from '../types'
 
 type FunctionArgs<T> = T extends (...args: infer A) => any ? A : never
 type FunctionReturnType<T> = T extends (...args: any[]) => infer R ? R : never
@@ -475,11 +483,11 @@ export class PlaywrightRPCClient extends Disposable {
     return contentClient.createRPCService(serviceIdentifier)
   }
 
-  async call<T = any>(
+  async call<T extends RpcTransferable = RpcTransferable>(
     service: string,
     method: string,
     to: RpcTo,
-    args: any[],
+    args: RpcTransferable[],
     options?: PlaywrightCreateServiceOptions
   ): Promise<T> {
     if (to === 'background') {

@@ -1,25 +1,46 @@
 export type RpcTo = 'content' | 'background'
-export type RpcFrom = 'runtime' | 'web' | 'wxt-page'
+export type RpcFrom = 'runtime' | 'wxt-page'
+export type RpcTransferable = boolean | number | string | null | undefined | object
+
+export interface RpcErrorPayload {
+  message: string
+  stack?: string
+  name?: string
+}
 
 export interface RpcRequest {
   id: string
   method: string
   service: string
-  args: any[]
+  args: RpcTransferable[]
   to: RpcTo
   from: RpcFrom
 }
 
 export interface RpcResponse {
   id: string
-  result?: any
-  error?: { message: string; stack?: string; name?: string }
+  result?: RpcTransferable
+  error?: RpcErrorPayload
   service: string
   method: string
-  from: RpcFrom
+  from?: RpcFrom
 }
 
-export type RpcHandler = (...args: any[]) => Promise<any> | any
+export interface RpcSuccessResponse<TResult extends RpcTransferable = RpcTransferable> {
+  ok: true
+  result: TResult
+}
+
+export interface RpcFailureResponse {
+  ok: false
+  error: RpcErrorPayload
+}
+
+export type RpcNativeResponse<TResult extends RpcTransferable = RpcTransferable> =
+  | RpcSuccessResponse<TResult>
+  | RpcFailureResponse
+
+export type RpcHandler = (...args: RpcTransferable[]) => Promise<RpcTransferable> | RpcTransferable
 
 export type RpcService = Record<string, RpcHandler>
 
@@ -48,6 +69,10 @@ export interface IMessageAdapter {
   onMessage<T>(type: string, callback: (message: T) => void): () => void
 
   sendMessage<T>(type: string, message: T): void
+
+  sendRequest?<TResult extends RpcTransferable>(
+    request: RpcRequest
+  ): Promise<RpcNativeResponse<TResult>>
 }
 
 export interface IDisposable {

@@ -4,7 +4,7 @@
 [![npm downloads](https://img.shields.io/npm/dm/crx-rpc.svg)](https://www.npmjs.com/package/crx-rpc)
 [![license](https://img.shields.io/npm/l/crx-rpc.svg)](https://github.com/weird94/crx-rpc/blob/main/LICENSE)
 
-一个用于 Chrome 扩展的类型安全 RPC 实现，支持 Content Scripts、Background、Popup/Sidepanel 和 Web Pages 之间的通信。
+一个用于 Chrome 扩展的类型安全 RPC 实现，支持 Background、Content Scripts，以及 Popup/Sidepanel 这类扩展运行时页面之间的通信。
 
 ## 安装
 
@@ -26,8 +26,9 @@ yarn add crx-rpc
 
 - **类型安全**: 基于 TypeScript 构建，提供完整的类型安全和 IntelliSense 支持。
 - **灵活**: 支持 Chrome 扩展内的多种通信路径。
-- **自动环境检测**: Host 和 client API 自动检测环境（background/content/web）。
-- **智能消息转发**: Content script 自动转发 web 到 background 的消息。
+- **原生 request-reply**: 使用 Chrome 原生 `sendMessage` / `sendResponse` 完成 RPC 往返。
+- **自动环境检测**: Host 自动检测 background 或 content 环境。
+- **单一 client API**: 用一个 client 入口处理 background 和 content 调用。
 
 ## 快速开始
 
@@ -56,7 +57,6 @@ class MathService implements IMathService {
 }
 
 // 自动检测环境（background/content）
-// 在 content script 中，自动转发 web 消息到 background
 const host = createHost()
 host.register(IMathService, new MathService())
 ```
@@ -67,7 +67,7 @@ host.register(IMathService, new MathService())
 import { createClient } from 'crx-rpc'
 import { IMathService } from './api'
 
-// 自动检测环境（runtime/web）
+// 需要运行在扩展环境中
 const client = createClient()
 
 // 调用 background service
@@ -81,16 +81,16 @@ await contentService.doSomething()
 
 ### 主要改进
 
-- **无需手动环境检测**: `createHost()` 和 `createClient()` 自动检测环境
-- **无需手动设置代理**: Content script 自动转发 web 消息
-- **智能路由**: 发往 content service 的 web 消息在本地处理，只有发往 background 的消息才转发
-- **单一 client API**: 无需在 `RuntimeRPCClient`、`WebRPCClient` 或 `TabRPCClient` 之间选择
+- **无需手动路由 host**: `createHost()` 自动区分 background 和 content
+- **原生传输**: RPC 响应通过原始 Chrome 消息通道直接返回
+- **无二次响应广播**: client 不再等待额外的 response event
+- **单一 client API**: 无需在 `RuntimeRPCClient` 和 `TabRPCClient` 之间选择
 
 ## 特性
 
 - **类型安全**: 基于 TypeScript 构建。
 - **灵活**: 支持 Chrome 扩展内的多种通信路径。
-- **Observable**: 支持类似 RxJS 的 observable 以进行实时更新。
+- **请求-响应**: 每次 RPC 调用只走一次原生消息往返。
 
 ## 通信架构
 
@@ -100,7 +100,7 @@ await contentService.doSomething()
 
 服务可以托管在两个位置：
 
-1.  **Background**: 托管在 background service worker。处理来自 Content Scripts、Popup/Sidepanel 和 Web Pages 的请求。
+1.  **Background**: 托管在 background service worker。处理来自 Content Scripts 和 Popup/Sidepanel 的请求。
 2.  **Content Script**: 托管在 content script。处理来自 Background 和 Popup/Sidepanel 的请求。
 
 ### 支持的通信流程
@@ -108,20 +108,18 @@ await contentService.doSomething()
 | 调用方              | 目标               | 用法                                            |
 | :------------------ | :----------------- | :---------------------------------------------- |
 | **Content Script**  | **Background**     | `client.createRPCService(IBackgroundService)`   |
-| **Web Page**        | **Background**     | `client.createRPCService(IBackgroundService)`   |
 | **Popup/Sidepanel** | **Background**     | `client.createRPCService(IBackgroundService)`   |
 | **Background**      | **Content Script** | `client.createRPCService(IContentService, { tabId })` |
 | **Popup/Sidepanel** | **Content Script** | `client.createRPCService(IContentService, { tabId })` |
-| **Web Page**        | **Content Script** | `client.createRPCService(IContentService)` (本地) |
 
-> **注意**: Web 到 background 的通信会自动通过 content script 中继。发往 content service 的消息如果在同一个 content script 中注册了服务则本地处理。
+> **注意**: Web Page RPC 已被移除。`createClient()` 现在要求运行在 Chrome 扩展环境中。
 
 ## API 参考
 
-- `createHost(log?: boolean)`: 创建自动检测环境的统一 RPC host
-- `UnifiedRPCHost`: 统一 host 类，自动环境检测和智能 web 转发
-- `createClient()`: 创建自动检测环境的统一 RPC client
-- `UnifiedRPCClient`: 统一 client 类，自动环境检测和动态 tabId 支持
+- `createHost(log?: boolean)`: 创建自动识别 background 或 content 的统一 RPC host
+- `UnifiedRPCHost`: 基于 Chrome 原生 request-reply 的统一 host 类
+- `createClient()`: 为扩展运行时上下文创建统一 RPC client
+- `UnifiedRPCClient`: 支持动态 `tabId` 的统一 client 类
 - `createPlaywrightBridge()`: 创建 Playwright RPC bridge，用于 background/content 互调
 - `PlaywrightRPCBridge#createBackgroundHost(log?: boolean)`: 创建 Node 侧 background host
 - `PlaywrightRPCBridge#createContentHost(page, targetId, log?: boolean)`: 创建绑定到真实 Playwright page 的 content host
