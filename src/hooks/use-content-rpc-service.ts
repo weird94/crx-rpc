@@ -44,7 +44,6 @@ const TAB_LOAD_STATUS = {
 } as const
 
 const NO_ACTIVE_TAB_FOUND_ERROR_MESSAGE = 'No active tab found'
-const USE_CONTENT_RPC_SERVICE_LOG_PREFIX = '[useContentRPCService]'
 
 type TabLoadStatus = (typeof TAB_LOAD_STATUS)[keyof typeof TAB_LOAD_STATUS] | null
 
@@ -300,8 +299,7 @@ export function useContentRPCService<T>(
 
   const error = isDisposed ? null : tabState.error ?? serviceState.error
   const tabId = isDisposed ? null : providedTabId ?? tabState.value?.id ?? null
-  const isLoading =
-    !isDisposed && (tabState.loading || tabStatus === TAB_LOAD_STATUS.Loading)
+  const isLoading = !isDisposed && (tabState.loading || tabStatus === TAB_LOAD_STATUS.Loading)
 
   return {
     service: isDisposed ? null : serviceState.service,
