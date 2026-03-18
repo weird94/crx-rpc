@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type DependencyList,
+} from 'react'
 import type { ServiceProxy } from '../client'
 import { type Identifier } from '../id'
 import { TabRPCClient } from '../tab-client'
@@ -22,6 +30,192 @@ interface UseContentRPCServiceResult<T> {
   refresh: () => void
   /** 销毁服务实例 */
   dispose: () => void
+}
+
+interface AsyncMemoState<T> {
+  error: Error | null
+  loading: boolean
+  value: T | null
+}
+
+const TAB_LOAD_STATUS = {
+  Complete: 'complete',
+  Loading: 'loading',
+} as const
+
+const NO_ACTIVE_TAB_FOUND_ERROR_MESSAGE = 'No active tab found'
+const USE_CONTENT_RPC_SERVICE_LOG_PREFIX = '[useContentRPCService]'
+
+type TabLoadStatus = (typeof TAB_LOAD_STATUS)[keyof typeof TAB_LOAD_STATUS] | null
+
+const activeTabChangeStore = {
+  listeners: new Set<() => void>(),
+  version: 0,
+}
+
+const notifyActiveTabChanged = () => {
+  activeTabChangeStore.version += 1
+  activeTabChangeStore.listeners.forEach(listener => {
+    listener()
+  })
+}
+
+function subscribeActiveTabChange(listener: () => void): () => void {
+  activeTabChangeStore.listeners.add(listener)
+
+  if (activeTabChangeStore.listeners.size === 1) {
+    chrome.tabs.onActivated.addListener(notifyActiveTabChanged)
+  }
+
+  return () => {
+    activeTabChangeStore.listeners.delete(listener)
+
+    if (activeTabChangeStore.listeners.size === 0) {
+      chrome.tabs.onActivated.removeListener(notifyActiveTabChanged)
+    }
+  }
+}
+
+function getActiveTabChangeVersion(): number {
+  return activeTabChangeStore.version
+}
+
+function normalizeTabLoadStatus(status: chrome.tabs.Tab['status'] | undefined): TabLoadStatus {
+  if (status === TAB_LOAD_STATUS.Complete) {
+    return TAB_LOAD_STATUS.Complete
+  }
+
+  if (status === TAB_LOAD_STATUS.Loading) {
+    return TAB_LOAD_STATUS.Loading
+  }
+
+  return null
+}
+
+function toError(error: Error | object | string | null | undefined): Error {
+  if (error instanceof Error) {
+    return error
+  }
+
+  return new Error(String(error))
+}
+
+function useAsyncMemo<T>(
+  factory: () => Promise<T | null>,
+  deps: DependencyList
+): AsyncMemoState<T> {
+  const [state, setState] = useState<AsyncMemoState<T>>({
+    error: null,
+    loading: true,
+    value: null,
+  })
+  const requestIdRef = useRef(0)
+
+  useEffect(() => {
+    let cancelled = false
+    const requestId = requestIdRef.current + 1
+    requestIdRef.current = requestId
+
+    setState({
+      error: null,
+      loading: true,
+      value: null,
+    })
+
+    const loadValue = async (): Promise<void> => {
+      try {
+        const value = await factory()
+        if (cancelled || requestIdRef.current !== requestId) {
+          return
+        }
+
+        setState({
+          error: null,
+          loading: false,
+          value,
+        })
+      } catch (error) {
+        if (cancelled || requestIdRef.current !== requestId) {
+          return
+        }
+
+        const nextError =
+          error instanceof Error ||
+          typeof error === 'string' ||
+          (typeof error === 'object' && error !== null)
+            ? toError(error)
+            : new Error(String(error))
+
+        setState({
+          error: nextError,
+          loading: false,
+          value: null,
+        })
+      }
+    }
+
+    void loadValue()
+
+    return () => {
+      cancelled = true
+      requestIdRef.current += 1
+    }
+  }, deps)
+
+  return state
+}
+
+function useActiveTabChangeVersion(enabled: boolean): number {
+  return useSyncExternalStore(
+    onStoreChange => {
+      if (!enabled) {
+        return () => {}
+      }
+
+      return subscribeActiveTabChange(onStoreChange)
+    },
+    getActiveTabChangeVersion,
+    getActiveTabChangeVersion
+  )
+}
+
+function useTabStatus(tab: chrome.tabs.Tab | null): TabLoadStatus {
+  const [status, setStatus] = useState<TabLoadStatus>(() => normalizeTabLoadStatus(tab?.status))
+
+  useEffect(() => {
+    const tabId = tab?.id
+    if (typeof tabId !== 'number' || tab == null) {
+      setStatus(null)
+      return
+    }
+
+    setStatus(normalizeTabLoadStatus(tab.status))
+
+    const handleTabUpdated = (
+      updatedTabId: number,
+      changeInfo: chrome.tabs.TabChangeInfo,
+      updatedTab: chrome.tabs.Tab
+    ) => {
+      if (updatedTabId !== tabId) {
+        return
+      }
+
+      if (changeInfo.status != null) {
+        setStatus(normalizeTabLoadStatus(changeInfo.status))
+        return
+      }
+
+      setStatus(normalizeTabLoadStatus(updatedTab.status))
+    }
+
+    chrome.tabs.onUpdated.addListener(handleTabUpdated)
+
+    return () => {
+      chrome.tabs.onUpdated.removeListener(handleTabUpdated)
+    }
+  }, [tab?.id, tab?.status])
+
+  return status
 }
 
 /**
@@ -49,97 +243,72 @@ export function useContentRPCService<T>(
   options: UseContentRPCServiceOptions = {}
 ): UseContentRPCServiceResult<T> {
   const { autoRecreate = true, tabId: providedTabId } = options
+  const [isDisposed, setIsDisposed] = useState(false)
+  const [refreshVersion, setRefreshVersion] = useState(0)
+  const activeTabChangeVersion = useActiveTabChangeVersion(
+    providedTabId == null && autoRecreate && !isDisposed
+  )
+  const tabState = useAsyncMemo(async (): Promise<chrome.tabs.Tab | null> => {
+    if (isDisposed) {
+      return null
+    }
 
-  const [service, setService] = useState<ServiceProxy<T> | null>(null)
-  const [tabId, setTabId] = useState<number | null>(providedTabId ?? null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<Error | null>(null)
+    if (providedTabId != null) {
+      return chrome.tabs.get(providedTabId)
+    }
 
-  const clientRef = useRef<TabRPCClient | null>(null)
-  const currentTabIdRef = useRef<number | null>(null)
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+    if (!tab?.id) {
+      throw new Error(NO_ACTIVE_TAB_FOUND_ERROR_MESSAGE)
+    }
 
-  const createService = useCallback(() => {
-    setIsLoading(true)
-    setError(null)
+    return chrome.tabs.get(tab.id)
+  }, [activeTabChangeVersion, isDisposed, providedTabId, refreshVersion])
 
-    const initializeService = async (): Promise<void> => {
-      try {
-        // 清理旧的 client
-        if (clientRef.current) {
-          clientRef.current.dispose()
-          clientRef.current = null
-        }
-
-        // 如果已知 tabId 则直接使用，跳过 chrome.tabs.query
-        let resolvedTabId: number
-        if (providedTabId != null) {
-          resolvedTabId = providedTabId
-        } else {
-          const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-          if (!tab.id) {
-            throw new Error('No active tab found')
-          }
-          resolvedTabId = tab.id
-        }
-
-        setTabId(resolvedTabId)
-        currentTabIdRef.current = resolvedTabId
-
-        // 创建 RPC client 和服务
-        const tabClient = new TabRPCClient(resolvedTabId)
-        clientRef.current = tabClient
-
-        const rpcService = tabClient.createRPCService(serviceIdentifier)
-        setService(rpcService)
-      } catch (err) {
-        console.error('[useContentRPCService] Failed to create service:', err)
-        setError(err instanceof Error ? err : new Error(String(err)))
-        setService(null)
-      } finally {
-        setIsLoading(false)
+  const tabStatus = useTabStatus(tabState.value)
+  const serviceState = useMemo((): { error: Error | null; service: ServiceProxy<T> | null } => {
+    const resolvedTabId = tabState.value?.id
+    if (typeof resolvedTabId !== 'number' || tabState.loading || tabState.value == null) {
+      return {
+        error: null,
+        service: null,
       }
     }
 
-    void initializeService()
-  }, [serviceIdentifier, providedTabId])
-
-  const dispose = useCallback(() => {
-    if (clientRef.current) {
-      clientRef.current.dispose()
-      clientRef.current = null
+    if (tabStatus !== TAB_LOAD_STATUS.Complete) {
+      return {
+        error: null,
+        service: null,
+      }
     }
-    setService(null)
-    setTabId(null)
+
+    const client = new TabRPCClient(resolvedTabId)
+    return {
+      error: null,
+      service: client.createRPCService(serviceIdentifier),
+    }
+  }, [serviceIdentifier, tabState.loading, tabState.value, tabStatus])
+
+  const refresh = useCallback(() => {
+    setIsDisposed(false)
+    setRefreshVersion(currentVersion => currentVersion + 1)
   }, [])
 
-  // 初始化创建服务
-  useEffect(() => {
-    createService()
+  const dispose = useCallback(() => {
+    setIsDisposed(true)
+  }, [])
 
-    if (providedTabId) {
-      return
-    }
-    // 监听 tab 变化
-    const handleTabActivated = (activeInfo: chrome.tabs.TabActiveInfo) => {
-      if (autoRecreate && activeInfo.tabId !== currentTabIdRef.current) {
-        createService()
-      }
-    }
-
-    chrome.tabs.onActivated.addListener(handleTabActivated)
-
-    return () => {
-      chrome.tabs.onActivated.removeListener(handleTabActivated)
-      dispose()
-    }
-  }, [createService, autoRecreate, dispose, providedTabId])
+  const error = isDisposed ? null : tabState.error ?? serviceState.error
+  const tabId = isDisposed ? null : providedTabId ?? tabState.value?.id ?? null
+  const isLoading =
+    !isDisposed && (tabState.loading || tabStatus === TAB_LOAD_STATUS.Loading)
 
   return {
-    service,
+    service: isDisposed ? null : serviceState.service,
     tabId,
     isLoading,
     error,
-    refresh: createService,
+    refresh,
     dispose,
   }
 }
