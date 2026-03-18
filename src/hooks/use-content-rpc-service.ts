@@ -1,15 +1,15 @@
 import {
   useCallback,
-  useEffect,
   useMemo,
-  useRef,
   useState,
-  useSyncExternalStore,
-  type DependencyList,
 } from 'react'
 import type { ServiceProxy } from '../client'
 import { type Identifier } from '../id'
 import { TabRPCClient } from '../tab-client'
+import { useActiveTabChangeVersion } from './useActiveTabChangeVersion'
+import { useAsyncMemo } from './useAsyncMemo'
+import { useTabStatus } from './useTabStatus'
+import { NO_ACTIVE_TAB_FOUND_ERROR_MESSAGE, TAB_LOAD_STATUS } from './utils'
 
 interface UseContentRPCServiceOptions {
   /** 是否在 tabId 变化时自动创建新的服务实例 */
@@ -30,191 +30,6 @@ interface UseContentRPCServiceResult<T> {
   refresh: () => void
   /** 销毁服务实例 */
   dispose: () => void
-}
-
-interface AsyncMemoState<T> {
-  error: Error | null
-  loading: boolean
-  value: T | null
-}
-
-const TAB_LOAD_STATUS = {
-  Complete: 'complete',
-  Loading: 'loading',
-} as const
-
-const NO_ACTIVE_TAB_FOUND_ERROR_MESSAGE = 'No active tab found'
-
-type TabLoadStatus = (typeof TAB_LOAD_STATUS)[keyof typeof TAB_LOAD_STATUS] | null
-
-const activeTabChangeStore = {
-  listeners: new Set<() => void>(),
-  version: 0,
-}
-
-const notifyActiveTabChanged = () => {
-  activeTabChangeStore.version += 1
-  activeTabChangeStore.listeners.forEach(listener => {
-    listener()
-  })
-}
-
-function subscribeActiveTabChange(listener: () => void): () => void {
-  activeTabChangeStore.listeners.add(listener)
-
-  if (activeTabChangeStore.listeners.size === 1) {
-    chrome.tabs.onActivated.addListener(notifyActiveTabChanged)
-  }
-
-  return () => {
-    activeTabChangeStore.listeners.delete(listener)
-
-    if (activeTabChangeStore.listeners.size === 0) {
-      chrome.tabs.onActivated.removeListener(notifyActiveTabChanged)
-    }
-  }
-}
-
-function getActiveTabChangeVersion(): number {
-  return activeTabChangeStore.version
-}
-
-function normalizeTabLoadStatus(status: chrome.tabs.Tab['status'] | undefined): TabLoadStatus {
-  if (status === TAB_LOAD_STATUS.Complete) {
-    return TAB_LOAD_STATUS.Complete
-  }
-
-  if (status === TAB_LOAD_STATUS.Loading) {
-    return TAB_LOAD_STATUS.Loading
-  }
-
-  return null
-}
-
-function toError(error: Error | object | string | null | undefined): Error {
-  if (error instanceof Error) {
-    return error
-  }
-
-  return new Error(String(error))
-}
-
-function useAsyncMemo<T>(
-  factory: () => Promise<T | null>,
-  deps: DependencyList
-): AsyncMemoState<T> {
-  const [state, setState] = useState<AsyncMemoState<T>>({
-    error: null,
-    loading: true,
-    value: null,
-  })
-  const requestIdRef = useRef(0)
-
-  useEffect(() => {
-    let cancelled = false
-    const requestId = requestIdRef.current + 1
-    requestIdRef.current = requestId
-
-    setState({
-      error: null,
-      loading: true,
-      value: null,
-    })
-
-    const loadValue = async (): Promise<void> => {
-      try {
-        const value = await factory()
-        if (cancelled || requestIdRef.current !== requestId) {
-          return
-        }
-
-        setState({
-          error: null,
-          loading: false,
-          value,
-        })
-      } catch (error) {
-        if (cancelled || requestIdRef.current !== requestId) {
-          return
-        }
-
-        const nextError =
-          error instanceof Error ||
-          typeof error === 'string' ||
-          (typeof error === 'object' && error !== null)
-            ? toError(error)
-            : new Error(String(error))
-
-        setState({
-          error: nextError,
-          loading: false,
-          value: null,
-        })
-      }
-    }
-
-    void loadValue()
-
-    return () => {
-      cancelled = true
-      requestIdRef.current += 1
-    }
-  }, deps)
-
-  return state
-}
-
-function useActiveTabChangeVersion(enabled: boolean): number {
-  return useSyncExternalStore(
-    onStoreChange => {
-      if (!enabled) {
-        return () => {}
-      }
-
-      return subscribeActiveTabChange(onStoreChange)
-    },
-    getActiveTabChangeVersion,
-    getActiveTabChangeVersion
-  )
-}
-
-function useTabStatus(tab: chrome.tabs.Tab | null): TabLoadStatus {
-  const [status, setStatus] = useState<TabLoadStatus>(() => normalizeTabLoadStatus(tab?.status))
-
-  useEffect(() => {
-    const tabId = tab?.id
-    if (typeof tabId !== 'number' || tab == null) {
-      setStatus(null)
-      return
-    }
-
-    setStatus(normalizeTabLoadStatus(tab.status))
-
-    const handleTabUpdated = (
-      updatedTabId: number,
-      changeInfo: chrome.tabs.TabChangeInfo,
-      updatedTab: chrome.tabs.Tab
-    ) => {
-      if (updatedTabId !== tabId) {
-        return
-      }
-
-      if (changeInfo.status != null) {
-        setStatus(normalizeTabLoadStatus(changeInfo.status))
-        return
-      }
-
-      setStatus(normalizeTabLoadStatus(updatedTab.status))
-    }
-
-    chrome.tabs.onUpdated.addListener(handleTabUpdated)
-
-    return () => {
-      chrome.tabs.onUpdated.removeListener(handleTabUpdated)
-    }
-  }, [tab?.id, tab?.status])
-
-  return status
 }
 
 /**
