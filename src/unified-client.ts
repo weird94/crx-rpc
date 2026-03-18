@@ -1,8 +1,8 @@
 import { Disposable } from './disposable'
 import { Identifier } from './id'
+import { RuntimeRPCClient } from './runtime-client'
+import { TabRPCClient } from './tab-client'
 import type { RpcTo, RpcTransferable } from './types'
-import { RuntimeRPCClient } from './adapter/runtime'
-import { TabRPCClient } from './adapter/tab'
 
 type ClientEnvironment = 'runtime'
 

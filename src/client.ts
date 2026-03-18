@@ -1,4 +1,3 @@
-import { RPC_EVENT_NAME, RPC_PING, RPC_PONG, RPC_RESPONSE_EVENT_NAME } from './const'
 import { Disposable } from './disposable'
 import { toRpcErrorLike } from './error'
 import type { Identifier } from './id'
@@ -9,7 +8,6 @@ import type {
   RpcFrom,
   RpcNativeResponse,
   RpcRequest,
-  RpcResponse,
   RpcTo,
   RpcTransferable,
 } from './types'
@@ -22,19 +20,6 @@ export type ServiceProxy<T> = {
     ? (...args: A) => Promise<Awaited<R>>
     : never
 }
-
-type PendingRequest = {
-  resolve: (value: RpcTransferable | undefined) => void
-  reject: (reason?: Error) => void
-}
-
-type PongMessage = {
-  type?: string
-}
-
-const RPC_READY_TIMEOUT_MS = 300
-const RPC_READY_PING_TIMEOUT_MS = 100
-const RPC_READY_RETRY_INTERVAL_MS = 50
 
 function toNativeRpcError(error: RpcErrorPayload): Error {
   const nativeError = new Error(error.message)
@@ -64,36 +49,11 @@ function fromTransportError(error: Error | object | string): Error {
 }
 
 export class RPCClient extends Disposable {
-  private pending: Map<string, PendingRequest> = new Map()
-
   constructor(
     private readonly messageAdapter: IMessageAdapter,
     private readonly from: RpcFrom
   ) {
     super()
-
-    if (messageAdapter.sendRequest) {
-      return
-    }
-
-    this.disposeWithMe(
-      messageAdapter.onMessage<RpcResponse>(RPC_RESPONSE_EVENT_NAME, (event: RpcResponse) => {
-        const { id, result, error } = event
-        const pendingRequest = this.pending.get(id)
-        if (!pendingRequest) {
-          return
-        }
-
-        this.pending.delete(id)
-
-        if (error) {
-          pendingRequest.reject(toNativeRpcError(error))
-          return
-        }
-
-        pendingRequest.resolve(result)
-      })
-    )
   }
 
   call<TResult extends RpcTransferable = RpcTransferable>(
@@ -112,77 +72,15 @@ export class RPCClient extends Disposable {
       from: this.from,
     }
 
-    if (this.messageAdapter.sendRequest) {
-      return this.messageAdapter
-        .sendRequest<TResult>(request)
-        .then(response => fromNativeResponse(response))
-        .catch(error =>
-          Promise.reject(fromTransportError(error instanceof Error ? error : String(error)))
-        )
-    }
-
-    return new Promise<TResult>((resolve, reject) => {
-      this.pending.set(id, {
-        resolve: value => {
-          resolve(value as TResult)
-        },
-        reject,
-      })
-
-      try {
-        this.messageAdapter.sendMessage(RPC_EVENT_NAME, request)
-      } catch (error) {
-        this.pending.delete(id)
-        reject(fromTransportError(error instanceof Error ? error : String(error)))
-      }
-    })
-  }
-
-  private async waitReady(timeout = RPC_READY_TIMEOUT_MS): Promise<void> {
-    if (this.messageAdapter.sendRequest) {
-      return
-    }
-
-    const startTime = Date.now()
-    const check = async () => {
-      return new Promise<boolean>(resolve => {
-        let settled = false
-
-        const timer = setTimeout(() => {
-          if (!settled) {
-            settled = true
-            resolve(false)
-          }
-        }, RPC_READY_PING_TIMEOUT_MS)
-
-        const dispose = this.messageAdapter.onMessage<PongMessage>(RPC_PONG, (message: PongMessage) => {
-          if (message.type !== RPC_PONG || settled) {
-            return
-          }
-          settled = true
-          clearTimeout(timer)
-          dispose()
-          resolve(true)
-        })
-
-        this.messageAdapter.sendMessage(RPC_PING, { type: RPC_PING })
-      })
-    }
-
-    while (Date.now() - startTime < timeout) {
-      const ready = await check()
-      if (ready) {
-        return
-      }
-      await new Promise(resolve => setTimeout(resolve, RPC_READY_RETRY_INTERVAL_MS))
-    }
-
-    throw new Error('RPC service not ready (timeout)')
+    return this.messageAdapter
+      .sendRequest<TResult>(request)
+      .then(response => fromNativeResponse(response))
+      .catch(error =>
+        Promise.reject(fromTransportError(error instanceof Error ? error : String(error)))
+      )
   }
 
   async createRPCService<T>(serviceIdentifier: Identifier<T>): Promise<ServiceProxy<T>> {
-    await this.waitReady()
-
     const serviceKey = serviceIdentifier.key
 
     return new Proxy(Object.create(null) as ServiceProxy<T>, {

@@ -1,5 +1,4 @@
 import { RPCClient } from '../client'
-import { RPC_EVENT_NAME, RPC_PING, RPC_PONG, RPC_RESPONSE_EVENT_NAME } from '../const'
 import { Disposable } from '../disposable'
 import { toRpcErrorLike } from '../error'
 import type { Identifier } from '../id'
@@ -7,8 +6,8 @@ import { randomId } from '../tool'
 import type {
   IMessageAdapter,
   RpcFrom,
+  RpcNativeResponse,
   RpcRequest,
-  RpcResponse,
   RpcService,
   RpcTo,
   RpcTransferable,
@@ -41,23 +40,50 @@ type SenderContext = {
   targetId?: PlaywrightTargetId
 }
 
-type HostListener = (message: any, sender: SenderContext) => void
-type ClientListener = (message: any) => void
+type HostListener = (
+  message: RpcRequest,
+  sender: SenderContext
+) => Promise<RpcNativeResponse<RpcTransferable> | undefined>
+
+function createSuccessResponse<TResult extends RpcTransferable>(
+  result: TResult
+): RpcNativeResponse<TResult> {
+  return {
+    ok: true,
+    result,
+  }
+}
+
+function createErrorResponse(error: { message: string; name?: string; stack?: string }): RpcNativeResponse {
+  return {
+    ok: false,
+    error,
+  }
+}
 
 class PlaywrightBus {
   private backgroundListeners = new Set<HostListener>()
   private contentListeners = new Map<string, Set<HostListener>>()
-  private clientListeners = new Map<string, Set<ClientListener>>()
 
   private targetKey(targetId: PlaywrightTargetId): string {
     return String(targetId)
   }
 
-  private safeInvoke(listener: (...args: any[]) => void, ...args: any[]) {
+  private async safeInvoke(
+    listener: HostListener,
+    message: RpcRequest,
+    sender: SenderContext
+  ): Promise<RpcNativeResponse<RpcTransferable> | undefined> {
     try {
-      listener(...args)
+      return await listener(message, sender)
     } catch (error) {
       console.error('[crx-rpc/playwright] listener error', error)
+      const rpcError = toRpcErrorLike(error instanceof Error ? error : String(error))
+      return createErrorResponse({
+        message: rpcError.message,
+        name: rpcError.name,
+        stack: rpcError.stack,
+      })
     }
   }
 
@@ -83,34 +109,54 @@ class PlaywrightBus {
     }
   }
 
-  onClientMessage(clientId: string, listener: ClientListener): () => void {
-    const listeners = this.clientListeners.get(clientId) || new Set<ClientListener>()
-    listeners.add(listener)
-    this.clientListeners.set(clientId, listeners)
-    return () => {
-      const current = this.clientListeners.get(clientId)
-      if (!current) return
-      current.delete(listener)
-      if (current.size === 0) {
-        this.clientListeners.delete(clientId)
+  private async dispatchRequest(
+    listeners: Iterable<HostListener>,
+    message: RpcRequest,
+    sender: SenderContext,
+    missingHostMessage: string
+  ): Promise<RpcNativeResponse<RpcTransferable>> {
+    for (const listener of listeners) {
+      const response = await this.safeInvoke(listener, message, sender)
+      if (response !== undefined) {
+        return response
       }
     }
+
+    return createErrorResponse({ message: missingHostMessage })
   }
 
-  sendToBackground(message: any, sender: SenderContext): void {
-    this.backgroundListeners.forEach(listener => this.safeInvoke(listener, message, sender))
+  sendToBackground(
+    message: RpcRequest,
+    sender: SenderContext
+  ): Promise<RpcNativeResponse<RpcTransferable>> {
+    return this.dispatchRequest(
+      this.backgroundListeners,
+      message,
+      sender,
+      'No background RPC host handled request'
+    )
   }
 
-  sendToContent(targetId: PlaywrightTargetId, message: any, sender: SenderContext): void {
+  sendToContent(
+    targetId: PlaywrightTargetId,
+    message: RpcRequest,
+    sender: SenderContext
+  ): Promise<RpcNativeResponse<RpcTransferable>> {
     const listeners = this.contentListeners.get(this.targetKey(targetId))
-    if (!listeners) return
-    listeners.forEach(listener => this.safeInvoke(listener, message, sender))
-  }
+    if (!listeners) {
+      return Promise.resolve(
+        createErrorResponse({
+          message: `No content RPC host handled request for target "${String(targetId)}"`,
+        })
+      )
+    }
 
-  sendToClient(clientId: string, message: any): void {
-    const listeners = this.clientListeners.get(clientId)
-    if (!listeners) return
-    listeners.forEach(listener => this.safeInvoke(listener, message))
+    return this.dispatchRequest(
+      listeners,
+      message,
+      sender,
+      `No content RPC host handled request for target "${String(targetId)}"`
+    )
   }
 }
 
@@ -121,27 +167,23 @@ type AdapterRoute =
       targetId: PlaywrightTargetId
     }
 
-class PlaywrightMessageAdapter implements IMessageAdapter {
+class PlaywrightRequestSender implements IMessageAdapter {
   constructor(
     private bus: PlaywrightBus,
     private sender: SenderContext,
     private route: AdapterRoute
   ) {}
 
-  onMessage<T>(type: string, callback: (message: T) => void): () => void {
-    return this.bus.onClientMessage(this.sender.clientId, (message: { type?: string } & T) => {
-      if (message.type !== type) return
-      callback(message)
-    })
-  }
-
-  sendMessage<T>(type: string, message: T): void {
-    const payload = { ...(message as Record<string, unknown>), type }
+  sendRequest<TResult extends RpcTransferable>(
+    request: RpcRequest
+  ): Promise<RpcNativeResponse<TResult>> {
     if (this.route.to === 'background') {
-      this.bus.sendToBackground(payload, this.sender)
-      return
+      return this.bus.sendToBackground(request, this.sender) as Promise<RpcNativeResponse<TResult>>
     }
-    this.bus.sendToContent(this.route.targetId, payload, this.sender)
+
+    return this.bus.sendToContent(this.route.targetId, request, this.sender) as Promise<
+      RpcNativeResponse<TResult>
+    >
   }
 }
 
@@ -157,7 +199,7 @@ abstract class BasePlaywrightHost extends Disposable {
   }
 
   register<T>(serviceIdentifier: Identifier<T>, serviceInstance: T): void {
-    this.services[serviceIdentifier.key] = serviceInstance as unknown as RpcService
+    this.services[serviceIdentifier.key] = serviceInstance as RpcService
     if (this.log) {
       console.log(
         `[crx-rpc/playwright] ${this.hostSide} host registered service "${serviceIdentifier.key}"`
@@ -165,77 +207,45 @@ abstract class BasePlaywrightHost extends Disposable {
     }
   }
 
-  protected handleIncomingMessage(
+  protected async handleIncomingRequest(
     expectedTo: RpcTo,
-    hostName: string,
-    rawMessage: RpcRequest & { type?: string },
+    rawMessage: RpcRequest,
     sender: SenderContext
-  ): void {
-    if (rawMessage.type === RPC_PING) {
-      this.bus.sendToClient(sender.clientId, {
-        type: RPC_PONG,
-        from: hostName,
-      })
-      return
+  ): Promise<RpcNativeResponse<RpcTransferable> | undefined> {
+    if (rawMessage.to !== expectedTo) {
+      return undefined
     }
-
-    if (rawMessage.type !== RPC_EVENT_NAME) return
-    if (rawMessage.to !== expectedTo) return
 
     const { id, service, method, args } = rawMessage
     const serviceInstance = this.services[service]
-
-    const sendResponse = (response: Omit<RpcResponse, 'from'>) => {
-      this.bus.sendToClient(sender.clientId, {
-        ...response,
-        type: RPC_RESPONSE_EVENT_NAME,
-        from: rawMessage.from,
-      })
-    }
+    const serviceMethod = serviceInstance?.[method]
 
     if (!serviceInstance) {
-      sendResponse({
-        id,
-        error: { message: `Unknown service: ${service}` },
-        service,
-        method,
+      return createErrorResponse({
+        message: `Unknown service: ${service}`,
       })
-      return
     }
 
-    if (!(method in serviceInstance)) {
-      sendResponse({
-        id,
-        error: { message: `Unknown method: ${method}` },
-        service,
-        method,
+    if (typeof serviceMethod !== 'function') {
+      return createErrorResponse({
+        message: `Unknown method: ${method}`,
       })
-      return
     }
 
-    Promise.resolve()
-      .then(() => serviceInstance[method](...args))
-      .then(result => {
-        sendResponse({
-          id,
-          result,
-          service,
-          method,
-        })
+    void id
+    void sender
+
+    try {
+      const result = await serviceMethod.apply(serviceInstance, args)
+      return createSuccessResponse(result)
+    } catch (error) {
+      const rpcError = toRpcErrorLike(error instanceof Error ? error : String(error))
+      return createErrorResponse({
+        message: rpcError.message,
+        stack: rpcError.stack,
+        name: rpcError.name,
       })
-      .catch(error => {
-        const rpcError = toRpcErrorLike(error)
-        sendResponse({
-          id,
-          error: {
-            message: rpcError.message,
-            stack: rpcError.stack,
-            name: rpcError.name,
-          },
-          service,
-          method,
-        })
-      })
+    }
   }
 }
 
@@ -243,7 +253,7 @@ export class PlaywrightBackgroundHost extends BasePlaywrightHost {
   constructor(bus: PlaywrightBus, log = false) {
     super('background', bus, log)
     const dispose = bus.onBackgroundMessage((message, sender) => {
-      this.handleIncomingMessage('background', 'background', message, sender)
+      return this.handleIncomingRequest('background', message, sender)
     })
     this.disposeWithMe(dispose)
   }
@@ -292,6 +302,26 @@ type SyncImpl<T> = {
     : T[K]
 }
 
+type BrowserRuntimeOutcome = {
+  result?: RpcTransferable
+  error?: {
+    message: string
+    name?: string
+    stack?: string
+  }
+}
+
+type BrowserRuntimeWindow = Window & {
+  __crxRpc?: {
+    call(
+      service: string,
+      method: string,
+      args: RpcTransferable[]
+    ): Promise<BrowserRuntimeOutcome>
+    register(key: string, impl: object): void
+  }
+}
+
 /**
  * A content host that runs registered services **inside the browser page**.
  * Service implementations have full access to `document`, `window`, etc.
@@ -321,67 +351,66 @@ export class PlaywrightPageContentHost extends Disposable {
 
     const dispose = bus.onContentMessage(
       targetId,
-      (rawMessage: RpcRequest & { type?: string }, sender: SenderContext) => {
-        this._handleIncomingMessage(rawMessage, sender)
+      (rawMessage: RpcRequest, sender: SenderContext) => {
+        return this.handleIncomingRequest(rawMessage, sender)
       }
     )
     this.disposeWithMe(dispose)
   }
 
-  private _handleIncomingMessage(
-    rawMessage: RpcRequest & { type?: string },
+  private async handleIncomingRequest(
+    rawMessage: RpcRequest,
     sender: SenderContext
-  ): void {
-    if (rawMessage.type === RPC_PING) {
-      this.bus.sendToClient(sender.clientId, {
-        type: RPC_PONG,
-        from: 'content',
-      })
-      return
+  ): Promise<RpcNativeResponse<RpcTransferable> | undefined> {
+    if (rawMessage.to !== 'content') {
+      return undefined
     }
 
-    if (rawMessage.type !== RPC_EVENT_NAME) return
-    if (rawMessage.to !== 'content') return
-
-    const { id, service, method, args } = rawMessage
-
-    const sendResponse = (response: Omit<RpcResponse, 'from'>) => {
-      this.bus.sendToClient(sender.clientId, {
-        ...response,
-        type: RPC_RESPONSE_EVENT_NAME,
-        from: rawMessage.from,
-      })
-    }
+    const { service, method, args } = rawMessage
 
     if (this.log) {
       console.log(`[crx-rpc/playwright] content host dispatching ${service}.${method} to page`)
     }
 
-    // Forward the call into the browser page and get a serialisable result back.
-    this.page
-      .evaluate(
-        ({ service, method, args }: { service: string; method: string; args: any[] }) =>
-          (window as any).__crxRpc.call(service, method, args),
-        { service, method, args }
-      )
-      .then(
-        (outcome: { result?: any; error?: { message: string; name?: string; stack?: string } }) => {
-          if (outcome.error) {
-            sendResponse({ id, service, method, error: outcome.error })
-          } else {
-            sendResponse({ id, service, method, result: outcome.result })
-          }
-        }
-      )
-      .catch((err: any) => {
-        const rpcError = toRpcErrorLike(err)
-        sendResponse({
-          id,
+    void sender
+
+    try {
+      const outcome = await this.page.evaluate(
+        ({
           service,
           method,
-          error: { message: rpcError.message, name: rpcError.name, stack: rpcError.stack },
-        })
+          args,
+        }: {
+          service: string
+          method: string
+          args: RpcTransferable[]
+        }) => {
+          const browserWindow = window as BrowserRuntimeWindow
+          return (
+            browserWindow.__crxRpc?.call(service, method, args) ??
+            Promise.resolve<BrowserRuntimeOutcome>({
+              error: {
+                message: 'Playwright RPC runtime not initialized',
+              },
+            })
+          )
+        },
+        { service, method, args }
+      )
+
+      if (outcome.error) {
+        return createErrorResponse(outcome.error)
+      }
+
+      return createSuccessResponse(outcome.result)
+    } catch (error) {
+      const rpcError = toRpcErrorLike(error instanceof Error ? error : String(error))
+      return createErrorResponse({
+        message: rpcError.message,
+        name: rpcError.name,
+        stack: rpcError.stack,
       })
+    }
   }
 
   /**
@@ -404,9 +433,12 @@ export class PlaywrightPageContentHost extends Disposable {
 
     await this.page.evaluate(
       ({ key, factoryStr }: { key: string; factoryStr: string }) => {
-        // eslint-disable-next-line no-new-func
         const impl = new Function(`return (${factoryStr})`)()()
-        ;(window as any).__crxRpc.register(key, impl)
+        const browserWindow = window as BrowserRuntimeWindow
+        if (!browserWindow.__crxRpc) {
+          throw new Error('Playwright RPC runtime not initialized')
+        }
+        browserWindow.__crxRpc.register(key, impl as object)
       },
       { key, factoryStr }
     )
@@ -440,8 +472,8 @@ export class PlaywrightRPCClient extends Disposable {
       side: this.options.from,
       targetId: route.to === 'content' ? route.targetId : undefined,
     }
-    const adapter = new PlaywrightMessageAdapter(this.bus, sender, route)
-    return new RPCClient(adapter, mapClientFrom(this.options.from))
+    const requestSender = new PlaywrightRequestSender(this.bus, sender, route)
+    return new RPCClient(requestSender, mapClientFrom(this.options.from))
   }
 
   private getOrCreateContentClient(targetId: PlaywrightTargetId): RPCClient {

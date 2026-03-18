@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { RuntimeRPCClient } from '../adapter/runtime'
 import { type Identifier } from '../id'
+import { RuntimeRPCClient } from '../runtime-client'
 
 type FunctionArgs<T> = T extends (...args: infer A) => any ? A : never
 type FunctionReturnType<T> = T extends (...args: any[]) => infer R ? R : never

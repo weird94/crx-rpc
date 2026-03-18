@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { TabRPCClient } from '../adapter/tab'
 import { type Identifier } from '../id'
+import { TabRPCClient } from '../tab-client'
 
 type FunctionArgs<T> = T extends (...args: infer A) => any ? A : never
 type FunctionReturnType<T> = T extends (...args: any[]) => infer R ? R : never
