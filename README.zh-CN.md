@@ -79,13 +79,6 @@ const contentService = await client.createRPCService(IContentService, { tabId: 1
 await contentService.doSomething()
 ```
 
-### 主要改进
-
-- **无需手动路由 host**: `createHost()` 自动区分 background 和 content
-- **原生传输**: RPC 响应通过原始 Chrome 消息通道直接返回
-- **无二次响应广播**: client 不再等待额外的 response event
-- **单一 client API**: 无需在 `RuntimeRPCClient` 和 `TabRPCClient` 之间选择
-
 ## 特性
 
 - **类型安全**: 基于 TypeScript 构建。
@@ -105,10 +98,10 @@ await contentService.doSomething()
 
 ### 支持的通信流程
 
-| 调用方              | 目标               | 用法                                            |
-| :------------------ | :----------------- | :---------------------------------------------- |
-| **Content Script**  | **Background**     | `client.createRPCService(IBackgroundService)`   |
-| **Popup/Sidepanel** | **Background**     | `client.createRPCService(IBackgroundService)`   |
+| 调用方              | 目标               | 用法                                                  |
+| :------------------ | :----------------- | :---------------------------------------------------- |
+| **Content Script**  | **Background**     | `client.createRPCService(IBackgroundService)`         |
+| **Popup/Sidepanel** | **Background**     | `client.createRPCService(IBackgroundService)`         |
 | **Background**      | **Content Script** | `client.createRPCService(IContentService, { tabId })` |
 | **Popup/Sidepanel** | **Content Script** | `client.createRPCService(IContentService, { tabId })` |
 

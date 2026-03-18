@@ -79,13 +79,6 @@ const contentService = await client.createRPCService(IContentService, { tabId: 1
 await contentService.doSomething()
 ```
 
-### Key Improvements
-
-- **No manual host routing**: `createHost()` automatically detects background vs content
-- **Native transport**: RPC replies come back through the original Chrome message channel
-- **No response event bus**: clients do not wait on a secondary broadcast response message
-- **Single client API**: No need to choose between `RuntimeRPCClient` and `TabRPCClient`
-
 ## Features
 
 - **Type-safe**: Built with TypeScript.
@@ -105,10 +98,10 @@ Services can be hosted in two locations:
 
 ### Supported Communication Flows
 
-| Caller              | Target             | Usage                                           |
-| :------------------ | :----------------- | :---------------------------------------------- |
-| **Content Script**  | **Background**     | `client.createRPCService(IBackgroundService)`   |
-| **Popup/Sidepanel** | **Background**     | `client.createRPCService(IBackgroundService)`   |
+| Caller              | Target             | Usage                                                 |
+| :------------------ | :----------------- | :---------------------------------------------------- |
+| **Content Script**  | **Background**     | `client.createRPCService(IBackgroundService)`         |
+| **Popup/Sidepanel** | **Background**     | `client.createRPCService(IBackgroundService)`         |
 | **Background**      | **Content Script** | `client.createRPCService(IContentService, { tabId })` |
 | **Popup/Sidepanel** | **Content Script** | `client.createRPCService(IContentService, { tabId })` |
 
