@@ -1,15 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { ServiceProxy } from '../client'
 import { type Identifier } from '../id'
 import { TabRPCClient } from '../tab-client'
-
-type FunctionArgs<T> = T extends (...args: infer A) => any ? A : never
-type FunctionReturnType<T> = T extends (...args: any[]) => infer R ? R : never
-
-type ServiceProxy<T> = {
-  [K in keyof T]: T[K] extends (...args: any[]) => any
-    ? (...args: FunctionArgs<T[K]>) => Promise<Awaited<FunctionReturnType<T[K]>>>
-    : never
-}
 
 interface UseContentRPCServiceOptions {
   /** 是否在 tabId 变化时自动创建新的服务实例 */
@@ -27,7 +19,7 @@ interface UseContentRPCServiceResult<T> {
   /** 错误信息 */
   error: Error | null
   /** 手动刷新服务实例 */
-  refresh: () => Promise<void>
+  refresh: () => void
   /** 销毁服务实例 */
   dispose: () => void
 }
@@ -66,45 +58,49 @@ export function useContentRPCService<T>(
   const clientRef = useRef<TabRPCClient | null>(null)
   const currentTabIdRef = useRef<number | null>(null)
 
-  const createService = useCallback(async () => {
+  const createService = useCallback(() => {
     setIsLoading(true)
     setError(null)
 
-    try {
-      // 清理旧的 client
-      if (clientRef.current) {
-        clientRef.current.dispose()
-        clientRef.current = null
-      }
-
-      // 如果已知 tabId 则直接使用，跳过 chrome.tabs.query
-      let resolvedTabId: number
-      if (providedTabId != null) {
-        resolvedTabId = providedTabId
-      } else {
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-        if (!tab.id) {
-          throw new Error('No active tab found')
+    const initializeService = async (): Promise<void> => {
+      try {
+        // 清理旧的 client
+        if (clientRef.current) {
+          clientRef.current.dispose()
+          clientRef.current = null
         }
-        resolvedTabId = tab.id
+
+        // 如果已知 tabId 则直接使用，跳过 chrome.tabs.query
+        let resolvedTabId: number
+        if (providedTabId != null) {
+          resolvedTabId = providedTabId
+        } else {
+          const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+          if (!tab.id) {
+            throw new Error('No active tab found')
+          }
+          resolvedTabId = tab.id
+        }
+
+        setTabId(resolvedTabId)
+        currentTabIdRef.current = resolvedTabId
+
+        // 创建 RPC client 和服务
+        const tabClient = new TabRPCClient(resolvedTabId)
+        clientRef.current = tabClient
+
+        const rpcService = tabClient.createRPCService(serviceIdentifier)
+        setService(rpcService)
+      } catch (err) {
+        console.error('[useContentRPCService] Failed to create service:', err)
+        setError(err instanceof Error ? err : new Error(String(err)))
+        setService(null)
+      } finally {
+        setIsLoading(false)
       }
-
-      setTabId(resolvedTabId)
-      currentTabIdRef.current = resolvedTabId
-
-      // 创建 RPC client 和服务
-      const tabClient = new TabRPCClient(resolvedTabId)
-      clientRef.current = tabClient
-
-      const rpcService = await tabClient.createRPCService(serviceIdentifier)
-      setService(rpcService as ServiceProxy<T>)
-    } catch (err) {
-      console.error('[useContentRPCService] Failed to create service:', err)
-      setError(err instanceof Error ? err : new Error(String(err)))
-      setService(null)
-    } finally {
-      setIsLoading(false)
     }
+
+    void initializeService()
   }, [serviceIdentifier, providedTabId])
 
   const dispose = useCallback(() => {

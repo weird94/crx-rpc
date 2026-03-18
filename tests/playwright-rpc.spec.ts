@@ -50,7 +50,7 @@ test('background and content can call each other through playwright bridge', asy
   }))
 
   const backgroundClient = bridge.createClient({ from: 'background' })
-  const contentService = await backgroundClient.createRPCService(IContentDomService, { targetId })
+  const contentService = backgroundClient.createRPCService(IContentDomService, { targetId })
   const valueText = await contentService.getText('#value')
   const prefixedTitle = await contentService.concatWithTitle('prefix')
 
@@ -58,7 +58,7 @@ test('background and content can call each other through playwright bridge', asy
   expect(prefixedTitle).toBe('prefix:hello-playwright')
 
   const contentClient = bridge.createClient({ from: 'content', defaultTargetId: targetId })
-  const backgroundService = await contentClient.createRPCService(IBackgroundMathService)
+  const backgroundService = contentClient.createRPCService(IBackgroundMathService)
   const sum = await backgroundService.add(7, 5)
 
   expect(sum).toBe(12)

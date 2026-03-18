@@ -80,7 +80,7 @@ export class RPCClient extends Disposable {
       )
   }
 
-  async createRPCService<T>(serviceIdentifier: Identifier<T>): Promise<ServiceProxy<T>> {
+  createRPCService<T>(serviceIdentifier: Identifier<T>): ServiceProxy<T> {
     const serviceKey = serviceIdentifier.key
 
     return new Proxy(Object.create(null) as ServiceProxy<T>, {

@@ -71,11 +71,11 @@ import { IMathService } from './api'
 const client = createClient()
 
 // Call background service
-const mathService = await client.createRPCService(IMathService)
+const mathService = client.createRPCService(IMathService)
 const result = await mathService.add(1, 2) // 3
 
 // Call content service (provide tabId)
-const contentService = await client.createRPCService(IContentService, { tabId: 123 })
+const contentService = client.createRPCService(IContentService, { tabId: 123 })
 await contentService.doSomething()
 ```
 

@@ -1,15 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import type { ServiceProxy } from '../client'
 import { type Identifier } from '../id'
 import { RuntimeRPCClient } from '../runtime-client'
-
-type FunctionArgs<T> = T extends (...args: infer A) => any ? A : never
-type FunctionReturnType<T> = T extends (...args: any[]) => infer R ? R : never
-
-type ServiceProxy<T> = {
-  [K in keyof T]: T[K] extends (...args: any[]) => any
-    ? (...args: FunctionArgs<T[K]>) => Promise<Awaited<FunctionReturnType<T[K]>>>
-    : never
-}
 
 interface UseBackgroundRPCServiceResult<T> {
   /** RPC 服务代理实例，可以直接调用服务方法 */
@@ -19,7 +11,7 @@ interface UseBackgroundRPCServiceResult<T> {
   /** 错误信息 */
   error: Error | null
   /** 手动刷新服务实例 */
-  refresh: () => Promise<void>
+  refresh: () => void
   /** 销毁服务实例 */
   dispose: () => void
 }
@@ -49,7 +41,7 @@ export function useBackgroundRPCService<T>(
 
   const clientRef = useRef<RuntimeRPCClient | null>(null)
 
-  const createService = useCallback(async () => {
+  const createService = useCallback(() => {
     setIsLoading(true)
     setError(null)
 
@@ -64,8 +56,8 @@ export function useBackgroundRPCService<T>(
       const runtimeClient = new RuntimeRPCClient()
       clientRef.current = runtimeClient
 
-      const rpcService = await runtimeClient.createRPCService(serviceIdentifier)
-      setService(rpcService as ServiceProxy<T>)
+      const rpcService = runtimeClient.createRPCService(serviceIdentifier)
+      setService(rpcService)
     } catch (err) {
       console.error('[useBackgroundRPCService] Failed to create service:', err)
       setError(err instanceof Error ? err : new Error(String(err)))

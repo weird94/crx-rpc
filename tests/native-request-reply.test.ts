@@ -98,7 +98,7 @@ describe('native request-reply transport', () => {
     vi.restoreAllMocks()
   })
 
-  it('resolves a background rpc call from the native runtime response', async () => {
+  it('returns a background service proxy synchronously and resolves native runtime responses', async () => {
     const runtimeSendMessage = vi.fn(async () => {
       return { ok: true, result: 3 }
     })
@@ -114,7 +114,7 @@ describe('native request-reply transport', () => {
     })
 
     const client = createClient()
-    const service = await client.createRPCService(IMathService)
+    const service = client.createRPCService(IMathService)
 
     await expect(service.add(1, 2)).resolves.toBe(3)
     expect(runtimeSendMessage).toHaveBeenCalledWith(
@@ -127,7 +127,7 @@ describe('native request-reply transport', () => {
     )
   })
 
-  it('rejects a content rpc call from the native tab response error payload', async () => {
+  it('returns a content service proxy synchronously and rejects native tab error payloads', async () => {
     const runtimeSendMessage = vi.fn(async () => {
       return { ok: true, result: null }
     })
@@ -155,7 +155,7 @@ describe('native request-reply transport', () => {
     })
 
     const client = createClient()
-    const service = await client.createRPCService(IReaderService, { tabId: 9 })
+    const service = client.createRPCService(IReaderService, { tabId: 9 })
 
     await expect(service.read('#value')).rejects.toThrow('selector missing')
     expect(tabSendMessage).toHaveBeenCalledWith(
@@ -166,6 +166,31 @@ describe('native request-reply transport', () => {
         method: 'read',
         to: 'content',
       })
+    )
+  })
+
+  it('throws synchronously when creating a content service without tabId', () => {
+    installChrome({
+      runtime: {
+        sendMessage: vi.fn(async () => {
+          return { ok: true, result: null }
+        }),
+        onMessage: {
+          addListener() {},
+          removeListener() {},
+        },
+      },
+      tabs: {
+        sendMessage: vi.fn(async () => {
+          return { ok: true, result: null }
+        }),
+      },
+    })
+
+    const client = createClient()
+
+    expect(() => client.createRPCService(IReaderService)).toThrow(
+      'TabId is required when calling content service "reader-service"'
     )
   })
 

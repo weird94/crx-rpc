@@ -1,16 +1,11 @@
 import { Disposable } from './disposable'
+import type { ServiceProxy } from './client'
 import { Identifier } from './id'
 import { RuntimeRPCClient } from './runtime-client'
 import { TabRPCClient } from './tab-client'
 import type { RpcTo, RpcTransferable } from './types'
 
 type ClientEnvironment = 'runtime'
-
-type ServiceProxy<T> = {
-  [K in keyof T]: T[K] extends (...args: infer A) => infer R
-    ? (...args: A) => Promise<Awaited<R>>
-    : never
-}
 
 export interface CreateServiceOptions {
   tabId?: number
@@ -51,10 +46,10 @@ export class UnifiedRPCClient extends Disposable {
     return tabClient
   }
 
-  async createRPCService<T>(
+  createRPCService<T>(
     serviceIdentifier: Identifier<T>,
     options?: CreateServiceOptions
-  ): Promise<ServiceProxy<T>> {
+  ): ServiceProxy<T> {
     if (serviceIdentifier.to === 'content') {
       const tabId = options?.tabId
       if (tabId === undefined) {

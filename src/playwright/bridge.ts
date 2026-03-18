@@ -13,14 +13,7 @@ import type {
   RpcTransferable,
 } from '../types'
 
-type FunctionArgs<T> = T extends (...args: infer A) => any ? A : never
-type FunctionReturnType<T> = T extends (...args: any[]) => infer R ? R : never
-
-type ServiceProxy<T> = {
-  [K in keyof T]: T[K] extends (...args: any[]) => any
-    ? (...args: FunctionArgs<T[K]>) => Promise<Awaited<FunctionReturnType<T[K]>>>
-    : never
-}
+import type { ServiceProxy } from '../client'
 
 export type PlaywrightTargetId = string | number
 export type PlaywrightSide = 'background' | 'content'
@@ -502,10 +495,10 @@ export class PlaywrightRPCClient extends Disposable {
     return resolved
   }
 
-  async createRPCService<T>(
+  createRPCService<T>(
     serviceIdentifier: Identifier<T>,
     options?: PlaywrightCreateServiceOptions
-  ): Promise<ServiceProxy<T>> {
+  ): ServiceProxy<T> {
     if (serviceIdentifier.to === 'background') {
       return this.backgroundClient.createRPCService(serviceIdentifier)
     }
