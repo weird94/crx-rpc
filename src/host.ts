@@ -1,4 +1,4 @@
-import { RPC_EVENT_NAME } from './const'
+import { RPC_EVENT_NAME, RPC_REQUEST_RELAY_EVENT_NAME, RPC_RESPONSE_EVENT_NAME } from './const'
 import { Disposable } from './disposable'
 import { toRpcErrorLike } from './error'
 import { Identifier } from './id'
@@ -36,7 +36,7 @@ function isRpcTo(value: string | undefined): value is RpcTo {
 }
 
 function isRpcFrom(value: string | undefined): value is RpcRequest['from'] {
-  return value === 'runtime' || value === 'wxt-page'
+  return value === 'runtime' || value === 'wxt-page' || value === 'web'
 }
 
 function isRpcRequestMessage(
@@ -125,6 +125,72 @@ export class UnifiedRPCHost extends Disposable {
     this.disposeWithMe(() => {
       chrome.runtime.onMessage.removeListener(handler)
     })
+
+    if (this.environment === 'content' && typeof window !== 'undefined') {
+      const webRelayHandler = ((event: Event) => {
+        const customEvent = event as CustomEvent<Partial<RpcRequest> & { type?: string }>
+        const message = customEvent.detail
+        if (!isRpcRequestMessage(message) || message.from !== 'web') {
+          return
+        }
+
+        if (message.to === 'background') {
+          void chrome.runtime
+            .sendMessage({
+              ...message,
+              type: RPC_EVENT_NAME,
+            })
+            .then(response => {
+              window.dispatchEvent(
+                new CustomEvent(RPC_RESPONSE_EVENT_NAME, {
+                  detail: {
+                    type: RPC_EVENT_NAME,
+                    id: message.id,
+                    response,
+                  },
+                })
+              )
+            })
+            .catch(error => {
+              const rpcError = toRpcErrorLike(error instanceof Error ? error : String(error))
+              window.dispatchEvent(
+                new CustomEvent(RPC_RESPONSE_EVENT_NAME, {
+                  detail: {
+                    type: RPC_EVENT_NAME,
+                    id: message.id,
+                    response: createErrorResponse({
+                      message: rpcError.message,
+                      stack: rpcError.stack,
+                      name: rpcError.name,
+                    }),
+                  },
+                })
+              )
+            })
+          return
+        }
+
+        void this.handleRequest(message, {
+          id: this.runtimeId,
+          url: window.location.href,
+        } as chrome.runtime.MessageSender).then(response => {
+          window.dispatchEvent(
+            new CustomEvent(RPC_RESPONSE_EVENT_NAME, {
+              detail: {
+                type: RPC_EVENT_NAME,
+                id: message.id,
+                response,
+              },
+            })
+          )
+        })
+      }) as EventListener
+
+      window.addEventListener(RPC_REQUEST_RELAY_EVENT_NAME, webRelayHandler)
+      this.disposeWithMe(() => {
+        window.removeEventListener(RPC_REQUEST_RELAY_EVENT_NAME, webRelayHandler)
+      })
+    }
   }
 
   private async handleRequest(

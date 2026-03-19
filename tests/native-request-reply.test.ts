@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createHost } from '../src/host'
 import { createIdentifier } from '../src/id'
 import { createClient } from '../src/unified-client'
-import { RPC_EVENT_NAME } from '../src/const'
+import { RPC_EVENT_NAME, RPC_REQUEST_RELAY_EVENT_NAME } from '../src/const'
 import type { RpcRequest, RpcTo } from '../src/types'
 
 interface MathService {
@@ -58,6 +58,10 @@ interface ChromeLike {
 type GlobalWithChrome = typeof globalThis & {
   chrome?: ChromeLike
   window?: typeof globalThis
+  location?: { href: string }
+  addEventListener?: typeof globalThis.addEventListener
+  removeEventListener?: typeof globalThis.removeEventListener
+  dispatchEvent?: typeof globalThis.dispatchEvent
 }
 
 function installChrome(chromeLike: ChromeLike): void {
@@ -69,6 +73,25 @@ function clearChrome(): void {
   const globalWithChrome: GlobalWithChrome = globalThis
   delete globalWithChrome.chrome
   delete globalWithChrome.window
+  delete globalWithChrome.location
+  delete globalWithChrome.addEventListener
+  delete globalWithChrome.removeEventListener
+  delete globalWithChrome.dispatchEvent
+}
+
+function removeChromeOnly(): void {
+  const globalWithChrome: GlobalWithChrome = globalThis
+  delete globalWithChrome.chrome
+}
+
+function installWindowContext(url: string = 'https://example.com/'): void {
+  const globalWithChrome: GlobalWithChrome = globalThis
+  const eventTarget = new EventTarget()
+  globalWithChrome.window = globalThis
+  globalWithChrome.location = { href: url }
+  globalWithChrome.addEventListener = eventTarget.addEventListener.bind(eventTarget)
+  globalWithChrome.removeEventListener = eventTarget.removeEventListener.bind(eventTarget)
+  globalWithChrome.dispatchEvent = eventTarget.dispatchEvent.bind(eventTarget)
 }
 
 function createRequest(service: string, method: string, to: RpcTo, args: number[] | string[]): RpcRequest {
@@ -332,8 +355,7 @@ describe('native request-reply transport', () => {
 
   it('content host replies through sendResponse for async service methods', async () => {
     let listener: RuntimeListener | null = null
-    const globalWithChrome: GlobalWithChrome = globalThis
-    globalWithChrome.window = globalThis
+    installWindowContext()
 
     installChrome({
       runtime: {
@@ -379,5 +401,101 @@ describe('native request-reply transport', () => {
       ok: true,
       result: 'value:#value',
     })
+  })
+
+  it('web client calls content service through request relay custom events', async () => {
+    let listener: RuntimeListener | null = null
+    installWindowContext()
+
+    installChrome({
+      runtime: {
+        id: 'runtime-id',
+        sendMessage: vi.fn(async () => {
+          return { ok: true, result: null }
+        }),
+        onMessage: {
+          addListener(nextListener) {
+            listener = nextListener
+          },
+          removeListener() {
+            listener = null
+          },
+        },
+      },
+      tabs: {
+        sendMessage: vi.fn(async () => {
+          return { ok: true, result: null }
+        }),
+      },
+    })
+
+    const host = createHost()
+    host.register(IReaderService, {
+      async read(selector: string): Promise<string> {
+        return `content:${selector}`
+      },
+    })
+
+    const chromeRef = globalThis.chrome
+    removeChromeOnly()
+
+    const client = createClient()
+    const service = client.createRPCService(IReaderService)
+
+    installChrome(chromeRef!)
+    void listener
+
+    await expect(service.read('#app')).resolves.toBe('content:#app')
+  })
+
+  it('web client relays background service calls through content runtime messaging', async () => {
+    installWindowContext()
+
+    const runtimeSendMessage = vi.fn(async (message: RpcRequest & { type?: string }) => {
+      expect(message.to).toBe('background')
+      expect(message.from).toBe('web')
+      return { ok: true, result: 42 }
+    })
+
+    installChrome({
+      runtime: {
+        id: 'runtime-id',
+        sendMessage: runtimeSendMessage,
+        onMessage: {
+          addListener() {},
+          removeListener() {},
+        },
+      },
+      tabs: {
+        sendMessage: vi.fn(async () => {
+          return { ok: true, result: null }
+        }),
+      },
+    })
+
+    createHost()
+
+    const chromeRef = globalThis.chrome
+    removeChromeOnly()
+
+    const requestSpy = vi.fn()
+    window.addEventListener(RPC_REQUEST_RELAY_EVENT_NAME, requestSpy as EventListener)
+
+    const client = createClient()
+    const service = client.createRPCService(IMathService)
+
+    installChrome(chromeRef!)
+
+    await expect(service.add(20, 22)).resolves.toBe(42)
+    expect(requestSpy).toHaveBeenCalledTimes(1)
+    expect(runtimeSendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: RPC_EVENT_NAME,
+        service: 'math-service',
+        method: 'add',
+        to: 'background',
+        from: 'web',
+      })
+    )
   })
 })

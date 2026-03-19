@@ -4,7 +4,7 @@
 [![npm downloads](https://img.shields.io/npm/dm/crx-rpc.svg)](https://www.npmjs.com/package/crx-rpc)
 [![license](https://img.shields.io/npm/l/crx-rpc.svg)](https://github.com/weird94/crx-rpc/blob/main/LICENSE)
 
-A type-safe RPC implementation for Chrome Extensions, supporting communication between Background, Content Scripts, and extension runtime pages such as Popup and Sidepanel.
+A type-safe RPC implementation for Chrome Extensions, supporting communication between Background, Content Scripts, Web Pages, and extension runtime pages such as Popup and Sidepanel.
 
 ## Installation
 
@@ -28,7 +28,8 @@ yarn add crx-rpc
 - **Flexible**: Supports various communication paths within a Chrome Extension.
 - **Native request-reply**: Uses Chrome's native `sendMessage` / `sendResponse` flow for RPC calls.
 - **Automatic Environment Detection**: Host APIs automatically detect background vs content runtime.
-- **Single client API**: One client entry point for background and content service calls.
+- **Single client API**: One client entry point for background, content, and web page initiated calls.
+- **Web request relay**: Web pages use custom events to call content services directly and relay background calls through the content script.
 
 ## Quick Start
 
@@ -67,7 +68,7 @@ host.register(IMathService, new MathService())
 import { createClient } from 'crx-rpc'
 import { IMathService } from './api'
 
-// Requires Chrome extension runtime APIs
+// Works in extension pages and injected web pages
 const client = createClient()
 
 // Call background service
@@ -104,15 +105,17 @@ Services can be hosted in two locations:
 | **Popup/Sidepanel** | **Background**     | `client.createRPCService(IBackgroundService)`         |
 | **Background**      | **Content Script** | `client.createRPCService(IContentService, { tabId })` |
 | **Popup/Sidepanel** | **Content Script** | `client.createRPCService(IContentService, { tabId })` |
+| **Web Page**        | **Content Script** | `client.createRPCService(IContentService)`            |
+| **Web Page**        | **Background**     | Relayed through content with `client.createRPCService(IBackgroundService)` |
 
-> **Note**: Web page RPC support is intentionally removed. `createClient()` now requires Chrome extension runtime APIs.
+> **Note**: When `createClient()` runs in a web page, it uses `CustomEvent` request/response relays. Background calls are forwarded by the content script.
 
 ## API Reference
 
 - `createHost(log?: boolean)`: Creates a unified RPC host that auto-detects background vs content
 - `UnifiedRPCHost`: Unified host class built on native Chrome request-reply messaging
-- `createClient()`: Creates a unified RPC client for extension runtime contexts
-- `UnifiedRPCClient`: Unified client class with dynamic `tabId` support for content services
+- `createClient()`: Creates a unified RPC client for extension runtime and injected web page contexts
+- `UnifiedRPCClient`: Unified client class with dynamic `tabId` support in extension contexts and request-relay support in web pages
 - `createPlaywrightBridge()`: Creates a Playwright RPC bridge for background/content mutual calls
 - `PlaywrightRPCBridge#createBackgroundHost(log?: boolean)`: Creates a background host in Node runtime
 - `PlaywrightRPCBridge#createContentHost(page, targetId, log?: boolean)`: Creates a content host bound to a real Playwright page
