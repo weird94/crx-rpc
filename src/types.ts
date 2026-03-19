@@ -1,5 +1,5 @@
 export type RpcTo = 'content' | 'background'
-export type RpcFrom = 'runtime' | 'wxt-page'
+export type RpcFrom = 'runtime' | 'wxt-page' | 'web'
 export type RpcTransferable = boolean | number | string | null | undefined | object
 
 export interface RpcErrorPayload {

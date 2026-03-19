@@ -3,9 +3,10 @@ import type { ServiceProxy } from './client'
 import { Identifier } from './id'
 import { RuntimeRPCClient } from './runtime-client'
 import { TabRPCClient } from './tab-client'
+import { WebPageRPCClient } from './web-client'
 import type { RpcTo, RpcTransferable } from './types'
 
-type ClientEnvironment = 'runtime'
+type ClientEnvironment = 'runtime' | 'web'
 
 export interface CreateServiceOptions {
   tabId?: number
@@ -16,22 +17,36 @@ function detectClientEnvironment(): ClientEnvironment {
     return 'runtime'
   }
 
-  throw new Error('Web page RPC support has been removed. Chrome runtime API is required.')
+  if (typeof window !== 'undefined') {
+    return 'web'
+  }
+
+  throw new Error('Chrome runtime API or window context is required.')
 }
 
 export class UnifiedRPCClient extends Disposable {
   private readonly environment: ClientEnvironment
-  private readonly runtimeClient: RuntimeRPCClient
+  private readonly runtimeClient?: RuntimeRPCClient
+  private readonly webClient?: WebPageRPCClient
   private readonly tabClients: Map<number, TabRPCClient> = new Map()
 
   constructor() {
     super()
     this.environment = detectClientEnvironment()
-    this.runtimeClient = new RuntimeRPCClient()
-    this.disposeWithMe(() => this.runtimeClient.dispose())
+    if (this.environment === 'runtime') {
+      this.runtimeClient = new RuntimeRPCClient()
+      this.disposeWithMe(() => this.runtimeClient?.dispose())
+    } else {
+      this.webClient = new WebPageRPCClient()
+      this.disposeWithMe(() => this.webClient?.dispose())
+    }
   }
 
   private getOrCreateTabClient(tabId: number): TabRPCClient {
+    if (this.environment !== 'runtime') {
+      throw new Error('TabId-based content service calls are only available in extension runtime contexts.')
+    }
+
     const existingClient = this.tabClients.get(tabId)
     if (existingClient) {
       return existingClient
@@ -51,6 +66,10 @@ export class UnifiedRPCClient extends Disposable {
     options?: CreateServiceOptions
   ): ServiceProxy<T> {
     if (serviceIdentifier.to === 'content') {
+      if (this.environment === 'web') {
+        return this.webClient!.createRPCService(serviceIdentifier)
+      }
+
       const tabId = options?.tabId
       if (tabId === undefined) {
         throw new Error(
@@ -62,7 +81,9 @@ export class UnifiedRPCClient extends Disposable {
       return this.getOrCreateTabClient(tabId).createRPCService(serviceIdentifier)
     }
 
-    return this.runtimeClient.createRPCService(serviceIdentifier)
+    return this.environment === 'runtime'
+      ? this.runtimeClient!.createRPCService(serviceIdentifier)
+      : this.webClient!.createRPCService(serviceIdentifier)
   }
 
   getEnvironment(): ClientEnvironment {
@@ -77,6 +98,10 @@ export class UnifiedRPCClient extends Disposable {
     options?: CreateServiceOptions
   ): Promise<TResult> {
     if (to === 'content') {
+      if (this.environment === 'web') {
+        return this.webClient!.call<TResult>(service, method, to, args)
+      }
+
       const tabId = options?.tabId
       if (tabId === undefined) {
         throw new Error('TabId is required when calling content service')
@@ -84,7 +109,9 @@ export class UnifiedRPCClient extends Disposable {
       return this.getOrCreateTabClient(tabId).call<TResult>(service, method, to, args)
     }
 
-    return this.runtimeClient.call<TResult>(service, method, to, args)
+    return this.environment === 'runtime'
+      ? this.runtimeClient!.call<TResult>(service, method, to, args)
+      : this.webClient!.call<TResult>(service, method, to, args)
   }
 }
 
