@@ -1,7 +1,9 @@
 import { RPC_EVENT_NAME, RPC_REQUEST_RELAY_EVENT_NAME, RPC_RESPONSE_EVENT_NAME } from './const'
+import { attachServiceAccessor } from './base-service'
 import { Disposable } from './disposable'
 import { toRpcErrorLike } from './error'
 import { Identifier } from './id'
+import { UnifiedRPCClient } from './unified-client'
 import type {
   RpcErrorPayload,
   RpcNativeResponse,
@@ -85,11 +87,14 @@ export class UnifiedRPCHost extends Disposable {
   private readonly services: Record<string, RpcService> = {}
   private readonly environment: Environment
   private readonly runtimeId?: string
+  private readonly serviceClient: UnifiedRPCClient
 
   constructor(private readonly log: boolean = false) {
     super()
     this.environment = detectEnvironment()
     this.runtimeId = this.environment === 'content' ? getRuntimeId() : undefined
+    this.serviceClient = new UnifiedRPCClient()
+    this.disposeWithMe(() => this.serviceClient.dispose())
     this.setupListener()
 
     if (this.log) {
@@ -241,6 +246,7 @@ export class UnifiedRPCHost extends Disposable {
   }
 
   register<T>(serviceIdentifier: Identifier<T>, serviceInstance: T): void {
+    attachServiceAccessor(serviceInstance, this.serviceClient)
     this.services[serviceIdentifier.key] = serviceInstance as RpcService
 
     if (this.log) {

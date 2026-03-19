@@ -116,8 +116,9 @@ Services can be hosted in two locations:
 - `UnifiedRPCHost`: Unified host class built on native Chrome request-reply messaging
 - `createClient()`: Creates a unified RPC client for extension runtime and injected web page contexts
 - `UnifiedRPCClient`: Unified client class with dynamic `tabId` support in extension contexts and request-relay support in web pages
+- `BaseService`: Base class for service implementations with a shared `getService()` helper
 - `createPlaywrightBridge()`: Creates a Playwright RPC bridge for background/content mutual calls
 - `PlaywrightRPCBridge#createBackgroundHost(log?: boolean)`: Creates a background host in Node runtime
 - `PlaywrightRPCBridge#createContentHost(page, targetId, log?: boolean)`: Creates a content host bound to a real Playwright page
-- `PlaywrightPageContentHost#register(identifier, factory)`: Registers a content service factory that runs inside the browser page
+- `PlaywrightPageContentHost#register(identifier, serviceOrFactory)`: Registers either a page-evaluated factory or a `PlaywrightPageService` instance with shared `getService()` support
 - `PlaywrightRPCBridge#createClient(options)`: Creates a client with `{ from, defaultTargetId? }`
