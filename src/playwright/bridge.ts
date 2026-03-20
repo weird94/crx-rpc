@@ -13,6 +13,12 @@ import type {
   RpcTo,
   RpcTransferable,
 } from '../types'
+import {
+  BROWSER_RUNTIME_OUTCOME_KIND_ERROR,
+  BROWSER_RUNTIME_OUTCOME_KIND_RESULT,
+  toBrowserRuntimeOutcome,
+  type BrowserRuntimeOutcomeCandidate,
+} from './browser-runtime-outcome'
 
 import type { ServiceProxy } from '../client'
 
@@ -287,13 +293,18 @@ type SyncImpl<T> = {
     : T[K]
 }
 
-type BrowserRuntimeOutcome = {
-  result?: RpcTransferable
-  error?: {
-    message: string
-    name?: string
-    stack?: string
-  }
+type BrowserFactoryServiceMethod = (
+  ...serviceArgs: RpcTransferable[]
+) => RpcTransferable | Promise<RpcTransferable>
+
+type BrowserFactoryService = Partial<Record<string, BrowserFactoryServiceMethod>>
+
+type BrowserEvaluateArgs = {
+  factoryStr: string
+  method: string
+  args: RpcTransferable[]
+  resultKind: typeof BROWSER_RUNTIME_OUTCOME_KIND_RESULT
+  errorKind: typeof BROWSER_RUNTIME_OUTCOME_KIND_ERROR
 }
 
 /**
@@ -398,48 +409,65 @@ export class PlaywrightPageContentHost extends Disposable {
     }
 
     try {
-      const outcome = await this.page.evaluate(
-        ({
-          factoryStr,
-          method,
-          args,
-        }: {
-          factoryStr: string
-          method: string
-          args: RpcTransferable[]
-        }) => {
-          const createService = new Function(`return (${factoryStr})`) as () => () => Record<string, unknown>
-          const service = createService()()
-          const serviceMethod = service[method]
+      const outcome = toBrowserRuntimeOutcome(
+        await this.page.evaluate(
+          async ({
+            factoryStr,
+            method,
+            args,
+            resultKind,
+            errorKind,
+          }: BrowserEvaluateArgs): Promise<BrowserRuntimeOutcomeCandidate> => {
+            const createService = new Function(`return (${factoryStr})`) as () => () => BrowserFactoryService
+            const service = createService()()
+            const serviceMethod = service[method]
 
-          if (typeof serviceMethod !== 'function') {
-            return Promise.resolve<BrowserRuntimeOutcome>({
-              error: {
-                message: `Unknown method: ${method}`,
-              },
-            })
-          }
-
-          return Promise.resolve()
-            .then(() =>
-              (serviceMethod as (...serviceArgs: RpcTransferable[]) => unknown).apply(service, args)
-            )
-            .then(result => ({ result }))
-            .catch((error: unknown) => {
-              const browserError = error as { message?: string; name?: string; stack?: string }
+            if (typeof serviceMethod !== 'function') {
               return {
+                kind: errorKind,
                 error: {
-                  message: browserError?.message ?? String(error),
-                  name: browserError?.name,
-                  stack: browserError?.stack,
+                  message: `Unknown method: ${method}`,
                 },
               }
-            })
-        },
-        { factoryStr: registration.factoryStr, method, args }
+            }
+
+            try {
+              const result = await serviceMethod.apply(service, args)
+              return {
+                kind: resultKind,
+                result,
+              }
+            } catch (error) {
+              if (error instanceof Error) {
+                return {
+                  kind: errorKind,
+                  error: {
+                    message: error.message,
+                    name: error.name,
+                    stack: error.stack,
+                  },
+                }
+              }
+
+              return {
+                kind: errorKind,
+                error: {
+                  message: String(error),
+                },
+              }
+            }
+          },
+          {
+            factoryStr: registration.factoryStr,
+            method,
+            args,
+            resultKind: BROWSER_RUNTIME_OUTCOME_KIND_RESULT,
+            errorKind: BROWSER_RUNTIME_OUTCOME_KIND_ERROR,
+          }
+        )
       )
 
-      if (outcome.error) {
+      if (outcome.kind === BROWSER_RUNTIME_OUTCOME_KIND_ERROR) {
         return createErrorResponse(outcome.error)
       }
 
