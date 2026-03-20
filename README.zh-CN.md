@@ -116,8 +116,9 @@ await contentService.doSomething()
 - `UnifiedRPCHost`: 基于 Chrome 原生 request-reply 的统一 host 类
 - `createClient()`: 创建统一 RPC client，可运行在扩展上下文和注入的 web 页面中
 - `UnifiedRPCClient`: 统一 client，扩展上下文支持动态 `tabId`，web 页面支持 request-relay
+- `BaseService`: service 实现可继承的基类，内置统一的 `getService()` 能力
 - `createPlaywrightBridge()`: 创建 Playwright RPC bridge，用于 background/content 互调
 - `PlaywrightRPCBridge#createBackgroundHost(log?: boolean)`: 创建 Node 侧 background host
 - `PlaywrightRPCBridge#createContentHost(page, targetId, log?: boolean)`: 创建绑定到真实 Playwright page 的 content host
-- `PlaywrightPageContentHost#register(identifier, factory)`: 注册在浏览器页面内执行的 content service factory
+- `PlaywrightPageContentHost#register(identifier, serviceOrFactory)`: 可注册 page.evaluate factory，或注册带统一 `getService()` 能力的 `PlaywrightPageService` 实例
 - `PlaywrightRPCBridge#createClient(options)`: 创建 client，参数为 `{ from, defaultTargetId? }`
