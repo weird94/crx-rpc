@@ -78,7 +78,7 @@ class PlaywrightBus {
       return await listener(message, sender)
     } catch (error) {
       console.error('[crx-rpc/playwright] listener error', error)
-      const rpcError = toRpcErrorLike(error instanceof Error ? error : String(error))
+      const rpcError = toRpcErrorLike(error)
       return createErrorResponse({
         message: rpcError.message,
         name: rpcError.name,
@@ -239,7 +239,7 @@ abstract class BasePlaywrightHost extends Disposable {
       const result = await serviceMethod.apply(serviceInstance, args)
       return createSuccessResponse(result)
     } catch (error) {
-      const rpcError = toRpcErrorLike(error instanceof Error ? error : String(error))
+      const rpcError = toRpcErrorLike(error)
       return createErrorResponse({
         message: rpcError.message,
         stack: rpcError.stack,
@@ -399,7 +399,7 @@ export class PlaywrightPageContentHost extends Disposable {
         const result = await serviceMethod.apply(registration.service, args)
         return createSuccessResponse(result)
       } catch (error) {
-        const rpcError = toRpcErrorLike(error instanceof Error ? error : String(error))
+        const rpcError = toRpcErrorLike(error)
         return createErrorResponse({
           message: rpcError.message,
           name: rpcError.name,
@@ -473,7 +473,7 @@ export class PlaywrightPageContentHost extends Disposable {
 
       return createSuccessResponse(outcome.result)
     } catch (error) {
-      const rpcError = toRpcErrorLike(error instanceof Error ? error : String(error))
+      const rpcError = toRpcErrorLike(error)
       return createErrorResponse({
         message: rpcError.message,
         name: rpcError.name,

@@ -157,7 +157,7 @@ export class UnifiedRPCHost extends Disposable {
               )
             })
             .catch(error => {
-              const rpcError = toRpcErrorLike(error instanceof Error ? error : String(error))
+              const rpcError = toRpcErrorLike(error)
               window.dispatchEvent(
                 new CustomEvent(RPC_RESPONSE_EVENT_NAME, {
                   detail: {
@@ -228,7 +228,7 @@ export class UnifiedRPCHost extends Disposable {
       const result = await serviceMethod.apply(serviceInstance, request.args)
       return createSuccessResponse(result)
     } catch (error) {
-      const rpcError = toRpcErrorLike(error instanceof Error ? error : String(error))
+      const rpcError = toRpcErrorLike(error)
 
       if (this.log) {
         console.error(

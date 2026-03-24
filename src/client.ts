@@ -75,9 +75,7 @@ export class RPCClient extends Disposable {
     return this.messageAdapter
       .sendRequest<TResult>(request)
       .then(response => fromNativeResponse(response))
-      .catch(error =>
-        Promise.reject(fromTransportError(error instanceof Error ? error : String(error)))
-      )
+      .catch(error => Promise.reject(fromTransportError(error)))
   }
 
   createRPCService<T>(serviceIdentifier: Identifier<T>): ServiceProxy<T> {
