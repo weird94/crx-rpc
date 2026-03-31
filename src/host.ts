@@ -1,9 +1,8 @@
-import { RPC_EVENT_NAME, RPC_REQUEST_RELAY_EVENT_NAME, RPC_RESPONSE_EVENT_NAME } from './const'
 import { attachServiceAccessor } from './base-service'
+import { RPC_EVENT_NAME, RPC_REQUEST_RELAY_EVENT_NAME, RPC_RESPONSE_EVENT_NAME } from './const'
 import { Disposable } from './disposable'
 import { toRpcErrorPayload } from './error'
 import type { Identifier } from './id'
-import { UnifiedRPCClient } from './unified-client'
 import type {
   RpcErrorPayload,
   RpcNativeResponse,
@@ -12,6 +11,7 @@ import type {
   RpcTo,
   RpcTransferable,
 } from './types'
+import { UnifiedRPCClient } from './unified-client'
 
 type Environment = 'background' | 'content'
 
@@ -118,7 +118,12 @@ export class UnifiedRPCHost extends Disposable {
         return false
       }
 
-      if (this.environment === 'content' && this.runtimeId && sender.id && sender.id !== this.runtimeId) {
+      if (
+        this.environment === 'content' &&
+        this.runtimeId &&
+        sender.id &&
+        sender.id !== this.runtimeId
+      ) {
         return false
       }
 

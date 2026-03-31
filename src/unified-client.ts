@@ -1,10 +1,10 @@
-import { Disposable } from './disposable'
 import type { ServiceProxy } from './client'
+import { Disposable } from './disposable'
 import type { Identifier } from './id'
 import { RuntimeRPCClient } from './runtime-client'
 import { TabRPCClient } from './tab-client'
-import { WebPageRPCClient } from './web-client'
 import type { RpcTo, RpcTransferable } from './types'
+import { WebPageRPCClient } from './web-client'
 
 type ClientEnvironment = 'runtime' | 'web'
 
@@ -44,7 +44,9 @@ export class UnifiedRPCClient extends Disposable {
 
   private getOrCreateTabClient(tabId: number): TabRPCClient {
     if (this.environment !== 'runtime') {
-      throw new Error('TabId-based content service calls are only available in extension runtime contexts.')
+      throw new Error(
+        'TabId-based content service calls are only available in extension runtime contexts.'
+      )
     }
 
     const existingClient = this.tabClients.get(tabId)
