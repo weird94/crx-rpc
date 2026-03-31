@@ -1,6 +1,6 @@
 import { Disposable } from './disposable'
 import type { ServiceProxy } from './client'
-import { Identifier } from './id'
+import type { Identifier } from './id'
 import { RuntimeRPCClient } from './runtime-client'
 import { TabRPCClient } from './tab-client'
 import { WebPageRPCClient } from './web-client'

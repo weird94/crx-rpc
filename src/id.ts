@@ -1,4 +1,4 @@
-import { RpcTo } from './types'
+import type { RpcTo } from './types'
 
 /**
  * Identifier 类型，既携带类型信息，又在运行时能唯一标识。

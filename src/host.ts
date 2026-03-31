@@ -1,8 +1,8 @@
 import { RPC_EVENT_NAME, RPC_REQUEST_RELAY_EVENT_NAME, RPC_RESPONSE_EVENT_NAME } from './const'
 import { attachServiceAccessor } from './base-service'
 import { Disposable } from './disposable'
-import { toRpcErrorLike } from './error'
-import { Identifier } from './id'
+import { toRpcErrorPayload } from './error'
+import type { Identifier } from './id'
 import { UnifiedRPCClient } from './unified-client'
 import type {
   RpcErrorPayload,
@@ -86,7 +86,7 @@ function detectEnvironment(): Environment {
 export class UnifiedRPCHost extends Disposable {
   private readonly services: Record<string, RpcService> = {}
   private readonly environment: Environment
-  private readonly runtimeId?: string
+  private readonly runtimeId: string | undefined
   private readonly serviceClient: UnifiedRPCClient
 
   constructor(private readonly log: boolean = false) {
@@ -157,17 +157,12 @@ export class UnifiedRPCHost extends Disposable {
               )
             })
             .catch(error => {
-              const rpcError = toRpcErrorLike(error)
               window.dispatchEvent(
                 new CustomEvent(RPC_RESPONSE_EVENT_NAME, {
                   detail: {
                     type: RPC_EVENT_NAME,
                     id: message.id,
-                    response: createErrorResponse({
-                      message: rpcError.message,
-                      stack: rpcError.stack,
-                      name: rpcError.name,
-                    }),
+                    response: createErrorResponse(toRpcErrorPayload(error)),
                   },
                 })
               )
@@ -228,7 +223,7 @@ export class UnifiedRPCHost extends Disposable {
       const result = await serviceMethod.apply(serviceInstance, request.args)
       return createSuccessResponse(result)
     } catch (error) {
-      const rpcError = toRpcErrorLike(error)
+      const rpcError = toRpcErrorPayload(error)
 
       if (this.log) {
         console.error(
@@ -237,11 +232,7 @@ export class UnifiedRPCHost extends Disposable {
         )
       }
 
-      return createErrorResponse({
-        message: rpcError.message,
-        stack: rpcError.stack,
-        name: rpcError.name,
-      })
+      return createErrorResponse(rpcError)
     }
   }
 

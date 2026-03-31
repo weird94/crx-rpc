@@ -1,5 +1,5 @@
 import { Disposable } from './disposable'
-import { toRpcErrorLike } from './error'
+import { toRpcErrorPayload } from './error'
 import type { Identifier } from './id'
 import { randomId } from './tool'
 import type {
@@ -40,12 +40,7 @@ function fromNativeResponse<TResult extends RpcTransferable>(
 }
 
 function fromTransportError(error: Error | object | string): Error {
-  const rpcError = toRpcErrorLike(error)
-  return toNativeRpcError({
-    message: rpcError.message,
-    name: rpcError.name,
-    stack: rpcError.stack,
-  })
+  return toNativeRpcError(toRpcErrorPayload(error))
 }
 
 export class RPCClient extends Disposable {
