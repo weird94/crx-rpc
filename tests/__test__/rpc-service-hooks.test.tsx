@@ -4,10 +4,10 @@ import { createRoot, type Root } from 'react-dom/client'
 import { act } from 'react-dom/test-utils'
 import React, { useEffect } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ServiceProxy } from '../src/client'
-import { createIdentifier, type Identifier } from '../src/id'
-import { useBackgroundRPCService } from '../src/hooks/use-background-rpc-service'
-import { useContentRPCService } from '../src/hooks/use-content-rpc-service'
+import type { ServiceProxy } from '../../src/client'
+import { createIdentifier, type Identifier } from '../../src/id'
+import { useBackgroundRPCService } from '../../src/hooks/use-background-rpc-service'
+import { useContentRPCService } from '../../src/hooks/use-content-rpc-service'
 
 interface BackgroundService {
   ping(): Promise<string>
@@ -50,7 +50,7 @@ const runtimeDisposeMock = vi.fn()
 const tabCreateServiceMock = vi.fn()
 const tabDisposeMock = vi.fn()
 
-vi.mock('../src/runtime-client', () => ({
+vi.mock('../../src/runtime-client', () => ({
   RuntimeRPCClient: class {
     createRPCService<T>(identifier: Identifier<T>): ServiceProxy<T> {
       return runtimeCreateServiceMock(identifier) as ServiceProxy<T>
@@ -62,7 +62,7 @@ vi.mock('../src/runtime-client', () => ({
   },
 }))
 
-vi.mock('../src/tab-client', () => ({
+vi.mock('../../src/tab-client', () => ({
   TabRPCClient: class {
     private readonly tabId: number
 

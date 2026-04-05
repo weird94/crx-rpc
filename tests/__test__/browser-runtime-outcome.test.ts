@@ -4,7 +4,7 @@ import {
   BROWSER_RUNTIME_OUTCOME_KIND_RESULT,
   INVALID_BROWSER_RUNTIME_OUTCOME_MESSAGE,
   toBrowserRuntimeOutcome,
-} from '../src/playwright/browser-runtime-outcome'
+} from '../../src/playwright/browser-runtime-outcome'
 
 describe('toBrowserRuntimeOutcome', () => {
   it('returns a result outcome when the browser returns a value', () => {

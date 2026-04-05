@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
-import { createIdentifier } from '../src/id'
-import { createPlaywrightBridge, PlaywrightPageService } from '../src/playwright'
+import { createIdentifier } from '../../src/id'
+import { createPlaywrightBridge, PlaywrightPageService } from '../../src/playwright'
 
 interface IBackgroundMathService {
   add(a: number, b: number): Promise<number>

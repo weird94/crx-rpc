@@ -4,7 +4,7 @@ import {
   TAB_LOAD_STATUS,
   normalizeTabLoadStatus,
   toError,
-} from '../src/hooks/utils'
+} from '../../src/hooks/utils'
 
 describe('useContentRPCService utils', () => {
   it('exports the expected shared constants', () => {

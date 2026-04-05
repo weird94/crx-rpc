@@ -3,10 +3,10 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { RPC_EVENT_NAME } from '../src/const'
-import { createHost } from '../src/host'
-import { createIdentifier } from '../src/id'
-import type { RpcRequest } from '../src/types'
+import { RPC_EVENT_NAME } from '../../src/const'
+import { createHost } from '../../src/host'
+import { createIdentifier } from '../../src/id'
+import type { RpcRequest } from '../../src/types'
 
 interface FailingService {
   fail(): Promise<void>

@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createHost } from '../src/host'
-import { createIdentifier } from '../src/id'
-import { createClient } from '../src/unified-client'
-import { RPC_EVENT_NAME, RPC_REQUEST_RELAY_EVENT_NAME } from '../src/const'
-import type { RpcRequest, RpcTo } from '../src/types'
+import { createHost } from '../../src/host'
+import { createIdentifier } from '../../src/id'
+import { createClient } from '../../src/unified-client'
+import { RPC_EVENT_NAME, RPC_REQUEST_RELAY_EVENT_NAME } from '../../src/const'
+import type { RpcRequest, RpcTo } from '../../src/types'
 
 interface MathService {
   add(left: number, right: number): Promise<number>
