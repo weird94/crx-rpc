@@ -2,8 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createHost } from '../../src/host'
 import { createIdentifier } from '../../src/id'
 import { createClient } from '../../src/unified-client'
-import { RPC_EVENT_NAME, RPC_REQUEST_RELAY_EVENT_NAME } from '../../src/const'
-import type { RpcRequest, RpcTo } from '../../src/types'
+import {
+  RPC_EVENT_NAME,
+  RPC_REQUEST_RELAY_EVENT_NAME,
+  RPC_RESPONSE_EVENT_NAME,
+} from '../../src/const'
+import type { RpcNativeResponse, RpcRequest, RpcTo } from '../../src/types'
 
 interface MathService {
   add(left: number, right: number): Promise<number>
@@ -64,6 +68,12 @@ type GlobalWithChrome = typeof globalThis & {
   dispatchEvent?: typeof globalThis.dispatchEvent
 }
 
+interface RelayResponseDetail {
+  type?: string
+  id?: string
+  response?: RpcNativeResponse
+}
+
 function installChrome(chromeLike: ChromeLike): void {
   const globalWithChrome: GlobalWithChrome = globalThis
   globalWithChrome.chrome = chromeLike
@@ -109,6 +119,26 @@ function flushPromises(): Promise<void> {
   return new Promise(resolve => {
     setTimeout(resolve, 0)
   })
+}
+
+function createDeferred<TResult>(): {
+  promise: Promise<TResult>
+  resolve: (value: TResult) => void
+} {
+  let resolvePromise: ((value: TResult) => void) | undefined
+  const promise = new Promise<TResult>(resolve => {
+    resolvePromise = resolve
+  })
+
+  return {
+    promise,
+    resolve(value: TResult) {
+      if (!resolvePromise) {
+        throw new Error('Deferred promise was not initialized.')
+      }
+      resolvePromise(value)
+    },
+  }
 }
 
 describe('native request-reply transport', () => {
@@ -497,5 +527,217 @@ describe('native request-reply transport', () => {
         from: 'web',
       })
     )
+  })
+
+  it('content host ignores runtime messages targeted to background services', async () => {
+    let listener: RuntimeListener | null = null
+    installWindowContext()
+
+    installChrome({
+      runtime: {
+        id: 'runtime-id',
+        sendMessage: vi.fn(async () => {
+          return { ok: true, result: null }
+        }),
+        onMessage: {
+          addListener(nextListener) {
+            listener = nextListener
+          },
+          removeListener() {
+            listener = null
+          },
+        },
+      },
+      tabs: {
+        sendMessage: vi.fn(async () => {
+          return { ok: true, result: null }
+        }),
+      },
+    })
+
+    createHost()
+
+    expect(listener).not.toBeNull()
+
+    const sendResponse = vi.fn<(response: object) => void>()
+    const handled = listener?.(
+      { ...createRequest('math-service', 'add', 'background', [1, 2]), type: RPC_EVENT_NAME },
+      { id: 'runtime-id' },
+      sendResponse
+    )
+
+    expect(handled).toBe(false)
+    await flushPromises()
+    expect(sendResponse).not.toHaveBeenCalled()
+  })
+
+  it('content web relay forwards background-target requests without local service handling', async () => {
+    installWindowContext()
+    const backgroundResponse = createDeferred<RpcNativeResponse<number>>()
+
+    const runtimeSendMessage = vi.fn((message: RpcRequest & { type?: string }) => {
+      expect(message.to).toBe('background')
+      expect(message.from).toBe('web')
+      return backgroundResponse.promise
+    })
+
+    installChrome({
+      runtime: {
+        id: 'runtime-id',
+        sendMessage: runtimeSendMessage,
+        onMessage: {
+          addListener() {},
+          removeListener() {},
+        },
+      },
+      tabs: {
+        sendMessage: vi.fn(async () => {
+          return { ok: true, result: null }
+        }),
+      },
+    })
+
+    const host = createHost()
+    const localAdd = vi.fn(async (left: number, right: number) => {
+      return left + right
+    })
+    host.register(IMathService, {
+      add: localAdd,
+    })
+
+    const responseSpy = vi.fn((event: Event) => {
+      const customEvent = event as CustomEvent<RelayResponseDetail>
+      return customEvent.detail
+    })
+
+    window.addEventListener(RPC_RESPONSE_EVENT_NAME, responseSpy as EventListener)
+
+    window.dispatchEvent(
+      new CustomEvent(RPC_REQUEST_RELAY_EVENT_NAME, {
+        detail: {
+          ...createRequest('math-service', 'add', 'background', [20, 22]),
+          from: 'web',
+          type: RPC_EVENT_NAME,
+        },
+      })
+    )
+
+    await flushPromises()
+    expect(runtimeSendMessage).toHaveBeenCalledTimes(1)
+    expect(localAdd).not.toHaveBeenCalled()
+    expect(responseSpy).not.toHaveBeenCalled()
+
+    backgroundResponse.resolve({
+      ok: true,
+      result: 42,
+    })
+    await flushPromises()
+
+    expect(responseSpy).toHaveBeenCalledTimes(1)
+    expect(responseSpy).toHaveReturnedWith({
+      type: RPC_EVENT_NAME,
+      id: 'request-1',
+      response: {
+        ok: true,
+        result: 42,
+      },
+    })
+
+    window.removeEventListener(RPC_RESPONSE_EVENT_NAME, responseSpy as EventListener)
+  })
+
+  it('content web relay handles content-target requests locally', async () => {
+    installWindowContext()
+
+    installChrome({
+      runtime: {
+        id: 'runtime-id',
+        sendMessage: vi.fn(async () => {
+          return { ok: true, result: null }
+        }),
+        onMessage: {
+          addListener() {},
+          removeListener() {},
+        },
+      },
+      tabs: {
+        sendMessage: vi.fn(async () => {
+          return { ok: true, result: null }
+        }),
+      },
+    })
+
+    const host = createHost()
+    host.register(IReaderService, {
+      async read(selector: string): Promise<string> {
+        return `content:${selector}`
+      },
+    })
+
+    const responseSpy = vi.fn((event: Event) => {
+      const customEvent = event as CustomEvent<RelayResponseDetail>
+      return customEvent.detail
+    })
+
+    window.addEventListener(RPC_RESPONSE_EVENT_NAME, responseSpy as EventListener)
+
+    window.dispatchEvent(
+      new CustomEvent(RPC_REQUEST_RELAY_EVENT_NAME, {
+        detail: {
+          ...createRequest('reader-service', 'read', 'content', ['#app']),
+          from: 'web',
+          type: RPC_EVENT_NAME,
+        },
+      })
+    )
+
+    await flushPromises()
+
+    expect(responseSpy).toHaveBeenCalledTimes(1)
+    expect(responseSpy).toHaveReturnedWith({
+      type: RPC_EVENT_NAME,
+      id: 'request-1',
+      response: {
+        ok: true,
+        result: 'content:#app',
+      },
+    })
+
+    window.removeEventListener(RPC_RESPONSE_EVENT_NAME, responseSpy as EventListener)
+  })
+
+  it('background host ignores runtime messages targeted to content services', async () => {
+    let listener: RuntimeListener | null = null
+
+    installChrome({
+      runtime: {
+        sendMessage: vi.fn(async () => {
+          return { ok: true, result: null }
+        }),
+        onMessage: {
+          addListener(nextListener) {
+            listener = nextListener
+          },
+          removeListener() {
+            listener = null
+          },
+        },
+      },
+    })
+
+    createHost()
+
+    expect(listener).not.toBeNull()
+
+    const sendResponse = vi.fn<(response: object) => void>()
+    const handled = listener?.(
+      { ...createRequest('reader-service', 'read', 'content', ['#app']), type: RPC_EVENT_NAME },
+      {},
+      sendResponse
+    )
+
+    expect(handled).toBe(false)
+    await flushPromises()
+    expect(sendResponse).not.toHaveBeenCalled()
   })
 })

@@ -71,6 +71,17 @@ function createErrorResponse(error: RpcErrorPayload): RpcNativeResponse {
   }
 }
 
+function createTargetMismatchResponse(
+  request: RpcRequest,
+  environment: Environment
+): RpcNativeResponse {
+  return createErrorResponse({
+    message:
+      `RPC target mismatch: ${request.service}.${request.method} is targeted to ` +
+      `${request.to} but reached ${environment}`,
+  })
+}
+
 function detectEnvironment(): Environment {
   if (hasChromeTabsApi() && !isWindowContext()) {
     return 'background'
@@ -144,51 +155,14 @@ export class UnifiedRPCHost extends Disposable {
           return
         }
 
-        if (message.to === 'background') {
-          void chrome.runtime
-            .sendMessage({
-              ...message,
-              type: RPC_EVENT_NAME,
-            })
-            .then(response => {
-              window.dispatchEvent(
-                new CustomEvent(RPC_RESPONSE_EVENT_NAME, {
-                  detail: {
-                    type: RPC_EVENT_NAME,
-                    id: message.id,
-                    response,
-                  },
-                })
-              )
-            })
-            .catch(error => {
-              window.dispatchEvent(
-                new CustomEvent(RPC_RESPONSE_EVENT_NAME, {
-                  detail: {
-                    type: RPC_EVENT_NAME,
-                    id: message.id,
-                    response: createErrorResponse(toRpcErrorPayload(error)),
-                  },
-                })
-              )
-            })
+        if (message.to !== this.environment) {
+          if (message.to === 'background') {
+            this.relayWebRequestToBackground(message)
+          }
           return
         }
 
-        void this.handleRequest(message, {
-          id: this.runtimeId,
-          url: window.location.href,
-        } as chrome.runtime.MessageSender).then(response => {
-          window.dispatchEvent(
-            new CustomEvent(RPC_RESPONSE_EVENT_NAME, {
-              detail: {
-                type: RPC_EVENT_NAME,
-                id: message.id,
-                response,
-              },
-            })
-          )
-        })
+        this.handleWebRequestInContent(message)
       }) as EventListener
 
       window.addEventListener(RPC_REQUEST_RELAY_EVENT_NAME, webRelayHandler)
@@ -198,6 +172,44 @@ export class UnifiedRPCHost extends Disposable {
     }
   }
 
+  private relayWebRequestToBackground(message: RpcRequest): void {
+    void chrome.runtime
+      .sendMessage<
+        RpcRequest & { type: typeof RPC_EVENT_NAME },
+        RpcNativeResponse<RpcTransferable>
+      >({
+        ...message,
+        type: RPC_EVENT_NAME,
+      })
+      .then(response => {
+        this.dispatchWebResponse(message.id, response)
+      })
+      .catch(error => {
+        this.dispatchWebResponse(message.id, createErrorResponse(toRpcErrorPayload(error)))
+      })
+  }
+
+  private handleWebRequestInContent(message: RpcRequest): void {
+    void this.handleRequest(message, {
+      id: this.runtimeId,
+      url: window.location.href,
+    } as chrome.runtime.MessageSender).then(response => {
+      this.dispatchWebResponse(message.id, response)
+    })
+  }
+
+  private dispatchWebResponse(id: string, response: RpcNativeResponse<RpcTransferable>): void {
+    window.dispatchEvent(
+      new CustomEvent(RPC_RESPONSE_EVENT_NAME, {
+        detail: {
+          type: RPC_EVENT_NAME,
+          id,
+          response,
+        },
+      })
+    )
+  }
+
   private async handleRequest(
     request: RpcRequest,
     sender: chrome.runtime.MessageSender
@@ -205,6 +217,10 @@ export class UnifiedRPCHost extends Disposable {
     const serviceInstance = this.services[request.service]
     const serviceMethod = serviceInstance?.[request.method]
     const senderLabel = sender.tab?.id ? `tab:${String(sender.tab.id)}` : sender.id || 'runtime'
+
+    if (request.to !== this.environment) {
+      return createTargetMismatchResponse(request, this.environment)
+    }
 
     if (this.log) {
       console.log(
@@ -217,11 +233,15 @@ export class UnifiedRPCHost extends Disposable {
     }
 
     if (!serviceInstance) {
-      return createErrorResponse({ message: `Unknown service: ${request.service}` })
+      return createErrorResponse({
+        message: `Unknown service at ${this.environment}: ${request.service}`,
+      })
     }
 
     if (typeof serviceMethod !== 'function') {
-      return createErrorResponse({ message: `Unknown method: ${request.method}` })
+      return createErrorResponse({
+        message: `Unknown method at ${this.environment}: ${request.method}`,
+      })
     }
 
     try {
