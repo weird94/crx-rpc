@@ -23,6 +23,10 @@
       "types": "./src/index.ts",
       "default": "./dist/index.js"
     },
+    "./react": {
+      "types": "./src/react.ts",
+      "default": "./dist/react.js"
+    },
     "./playwright": {
       "types": "./src/playwright.ts",
       "default": "./dist/playwright.js"

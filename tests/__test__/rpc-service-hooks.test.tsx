@@ -6,8 +6,7 @@ import React, { useEffect } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ServiceProxy } from '../../src/client'
 import { createIdentifier, type Identifier } from '../../src/id'
-import { useBackgroundRPCService } from '../../src/hooks/use-background-rpc-service'
-import { useContentRPCService } from '../../src/hooks/use-content-rpc-service'
+import { useBackgroundRPCService, useContentRPCService } from '../../src/react'
 
 interface BackgroundService {
   ping(): Promise<string>
@@ -360,11 +359,7 @@ describe('RPC service hooks', () => {
     expect(latestState?.isLoading).toBe(true)
 
     await act(async () => {
-      await chromeTabs.emitUpdated(
-        5,
-        { status: 'complete', url: completedTab.url },
-        completedTab
-      )
+      await chromeTabs.emitUpdated(5, { status: 'complete', url: completedTab.url }, completedTab)
     })
 
     expect(latestState?.service).not.toBeNull()
@@ -406,11 +401,7 @@ describe('RPC service hooks', () => {
     expect(latestState?.isLoading).toBe(true)
 
     await act(async () => {
-      await chromeTabs.emitUpdated(
-        7,
-        { status: 'complete', url: completedTab.url },
-        completedTab
-      )
+      await chromeTabs.emitUpdated(7, { status: 'complete', url: completedTab.url }, completedTab)
     })
 
     expect(latestState?.service).not.toBeNull()
@@ -458,11 +449,7 @@ describe('RPC service hooks', () => {
     expect(latestState?.isLoading).toBe(true)
 
     await act(async () => {
-      await chromeTabs.emitUpdated(
-        9,
-        { status: 'complete', url: completedTab.url },
-        completedTab
-      )
+      await chromeTabs.emitUpdated(9, { status: 'complete', url: completedTab.url }, completedTab)
     })
 
     expect(latestState?.service).not.toBeNull()
